@@ -338,6 +338,8 @@ try {
       /命格总览/.test(briefText) && /格局识别/.test(briefText) && /本命四化/.test(briefText),
       `len=${briefText.length}`,
     )
+    // 概览卡片有入场动画（framer-motion），截图前等一下，否则拍到空白
+    await page.waitForTimeout(900)
     await page.screenshot({ path: path.join(outDir, '06-brief.png') })
     await frame.locator('[data-ziwei-brief-toggle]').click()
     await briefBody.waitFor({ state: 'detached', timeout: 10000 }).catch(() => {})
@@ -349,6 +351,7 @@ try {
     await starPanel.waitFor({ state: 'visible', timeout: 15000 })
     const starText = await starPanel.innerText()
     check('点星曜弹出星曜详情（古籍 + 倪师解读）', starText.length > 120 && /(倪师|古诀)/.test(starText), `len=${starText.length}`)
+    await page.waitForTimeout(500)
     await page.screenshot({ path: path.join(outDir, '07-star-detail.png') })
     await starPanel.locator('button').first().click({ force: true }).catch(() => {})
     await starPanel.waitFor({ state: 'detached', timeout: 5000 }).catch(() => {})

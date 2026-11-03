@@ -17,7 +17,7 @@
 | `lib/index.js` | host 半：注册 `prefix /ziwei` 反向代理 → `http://127.0.0.1:8815`，先过 DSH 自己的登录闸门；`/ziwei/ai`（模型解读）与 `/ziwei/birth`（生辰配置）走自己的 handler |
 | `lib/ai.js` | host 半：解读接口，用 `ctx.llm.stream()` 调宿主模型，SSE 流式回吐 |
 | `lib/birth-store.js` | host 半：生辰的服务端存储，读写 `$DSH_HOME/ziwei/birth.json`（0600） |
-| `client.js` | client 半：注册侧栏行（panellist 座位）+ 主面板（main 座位，keyed=`ziwei`），内嵌同源 iframe |
+| `client.js` | client 半：注册侧栏行（panellist 座位）+ 主面板（main 座位，keyed=`ziwei`）；面板顶部分段控件切换排盘/合盘/古籍/百科四个视图，内嵌同源 iframe |
 | `verify.mjs` | 真实浏览器验收（playwright），默认打测试实例，可指定生产地址 |
 | `restart-and-verify.sh` | 生产重启 + 自动验收，脱离当前会话执行（见下） |
 
@@ -118,6 +118,33 @@
    同时复制一份到剪贴板兜底。
 3. 会话里就是完整的命盘 + 你补充的问题，按回车即开始解读。
 
+### 面板里的四个视图
+
+工具条右侧是分段控件，`排盘 / 合盘 / 古籍 / 百科` 分别对应应用里的
+`/ziwei/chart`、`/ziwei/heming`、`/ziwei/library`、`/ziwei/knowledge`：
+
+- 切换时重建 iframe（`switchView`），并清掉上一张盘摘要，避免「让 DSH 解读」拿到错盘的文本；
+- 每个视图的 URL 都带上 `?theme=<宿主题>`，配色继续跟随 DSH 外壳；
+- iframe 上有 `data-dsh-ziwei-frame="<view>"`、按钮上有 `data-dsh-ziwei-tab="<view>"`，
+  验收脚本靠它们断言「确实切过去了」。
+
+### 命盘页上的三处零件
+
+应用里原本有、但插件版早期接丢了三块，现在都接回排盘页（都在 iframe 内，不走宿主）：
+
+- **命盘概览抽屉**：工具条上一行常驻摘要（`命宫 · 主星 | 五行局 | 格局 N 个`），
+  点「展开命盘概览」在盘面上方展开 `ChartSummary`（命格总览 + 本命四化 + 格局识别），
+  再点收起，不占常驻高度。
+- **点星看解释**：点盘面上任何一颗星，右上弹出 `StarDetailPanel`（古籍原文、倪师解读、
+  最佳宫位、职业/感情/财运倾向）。挂点在 `PalaceCell` 的 `data-ziwei-star`。
+- **分享命盘**：弹层里是 `ShareCardCanvas` 渲染的分享卡（html2canvas 现场生成 PNG 下载），
+  以及一个**带生辰参数的链接** `?b=1990-6-15-5&g=m`——对方点开直接看到同一张盘，
+  不用重填；分享链接优先级高于服务端记住的生辰，且不会被写回生辰配置。
+
+顺带清理：`PatternsCard`（与概览里的「格局识别」重复）和 `FamousPersonCard`
+（依赖 server-only 的名人数据、没有任何入口）已删除；`lib/ziwei/patterns.ts` 去掉了
+`import 'server-only'`（纯计算，客户端要用），`famous.ts` 仍保留 server-only。
+
 ## 怎么验证
 
 ```bash
@@ -171,14 +198,19 @@ sudo systemd-run --on-active=10s --unit=dsh-ziwei-verify \
 `verify.mjs` 里有一条「内嵌页配色跟随 DSH 外壳」：读外壳的 `color-scheme`，再读 iframe 里的
 `<html data-theme>`，两者必须一致。最近的图标见 `verification/light/`。
 
-## 验收项（20）
+## 验收项（38）
 
 侧栏入口与顺序、面板打开、iframe 渲染、配色跟随外壳、登录/未登录鉴权、起盘、
+**版面纵向撑满**、**宠物遮挡区域同步给内嵌页**、
+**生辰写进服务端配置（含表单快照、不再写 localStorage）**、
 **解读面板存在（由 DSH 模型生成）**、**应用旧 `/api/interpret` 已 404**、
 **自动生成命格解读**、**切 tab 重新解读**、**追问按钮不被宠物浮层遮挡**、
-**追问带上下文继续解读**、**起盘后生辰写入 localStorage**、盘面桥接、新会话、
+**追问带上下文继续解读**、**命盘概览抽屉展开/收起**、**点星弹出星曜详情**、
+**分享弹层渲染分享卡**、**分享链接带生辰参数**、**能生成并下载分享图**、
+**分享链接能还原同一张盘**、**面板四个视图切换**、盘面桥接、新会话、
 草稿预填、剪贴板兜底、无控制台报错。
-截图在 `verification/`（`03-chart-bridged.png`、`05-panel-reading.png`）。
+截图在 `verification/`（`03-chart-bridged.png`、`05-panel-reading.png`、
+`06-brief.png`、`07-star-detail.png`、`08-share.png`、`09-panel-knowledge.png`）。
 
 ## 依赖
 
@@ -189,8 +221,8 @@ sudo systemd-run --on-active=10s --unit=dsh-ziwei-verify \
 
 ## 已知限制
 
-- 排盘应用自带的「命理解读」（`/api/interpret`）走它自己的模型配置，跟插件无关；
-  插件路径是 DSH 的 Agent，用你自己的模型和额度。
+- 解读只有一条路：插件 host 半的 `/ziwei/ai` → 宿主模型（用你自己的模型与额度）；
+  应用自带的 `/api/interpret` 已删除，不存在第二套配置。
 - 「让 DSH 解读」要求至少有一个 Workspace；全新 DSH_HOME 会先由
   `workspaces.initializeDefault()` 建默认工作区再开会话。
 - 草稿插入依赖浏览器 `execCommand`，失败时退化为「剪贴板 + 用户手动粘贴」。
