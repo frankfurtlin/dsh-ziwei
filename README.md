@@ -31,7 +31,7 @@
 | `lib/index.js` | host 半：注册 `prefix /ziwei` 反向代理 → `http://127.0.0.1:8815`，先过 DSH 自己的登录闸门；`/ziwei/ai`（模型解读）与 `/ziwei/birth`（生辰配置）走自己的 handler |
 | `lib/ai.js` | host 半：解读接口，用 `ctx.llm.stream()` 调宿主模型，SSE 流式回吐 |
 | `lib/birth-store.js` | host 半：生辰的服务端存储，读写 `$DSH_HOME/ziwei/birth.json`（0600） |
-| `client.js` | client 半：注册侧栏行（panellist 座位）+ 主面板（main 座位，keyed=`ziwei`）；面板顶部分段控件切换排盘/古籍/百科三个视图，内嵌同源 iframe |
+| `client.js` | client 半：注册侧栏行（panellist 座位）+ 主面板（main 座位，keyed=`ziwei`）；面板顶部分段控件切换排盘/合盘/古籍/百科四个视图，内嵌同源 iframe |
 | `verify.mjs` | 真实浏览器验收（playwright），默认打测试实例，可指定生产地址 |
 | `restart-and-verify.sh` | 生产重启 + 自动验收，脱离当前会话执行（见下） |
 
@@ -83,6 +83,8 @@
 
 排盘页右侧的「命理解读」是插件提供的，不用应用自己的 API Key：
 
+- 合盘页（`app/heming/page.tsx`）也走同一个接口：`topic: "heming"` + `digest`（甲方）+
+  `digestB`（乙方），host 半把两段摘要分别标成【甲方命盘】【乙方命盘】再拼进 prompt。
 - 应用侧 `components/InsightPanel.tsx` 直接 `fetch("/ziwei/ai")`（同源同 basePath），
   六个 tab（命格/感情/事业/财运/健康/性格）+ 底部追问框；盘面摘要由
   `lib/ziwei/digest.ts` 压成文本随请求一起发过去。
@@ -132,11 +134,10 @@
    同时复制一份到剪贴板兜底。
 3. 会话里就是完整的命盘 + 你补充的问题，按回车即开始解读。
 
-### 面板里的三个视图
+### 面板里的四个视图
 
-工具条右侧是分段控件，`排盘 / 古籍 / 百科` 分别对应应用里的
-`/ziwei/chart`、`/ziwei/library`、`/ziwei/knowledge`
-（合盘页只有「调应用内 AI 接口」一条路，应用内 AI 已经去掉，所以不再放进来）：
+工具条右侧是分段控件，`排盘 / 合盘 / 古籍 / 百科` 分别对应应用里的
+`/ziwei/chart`、`/ziwei/heming`、`/ziwei/library`、`/ziwei/knowledge`：
 
 - 切换时重建 iframe（`switchView`），并清掉上一张盘摘要，避免「让 DSH 解读」拿到错盘的文本；
 - 每个视图的 URL 都带上 `?theme=<宿主题>`，配色继续跟随 DSH 外壳；

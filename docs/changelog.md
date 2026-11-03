@@ -227,6 +227,27 @@
 
 ---
 
+## 13. 合盘回归：不再依赖应用内 AI
+
+上一轮「去开源痕迹」把合盘当成死功能删了，因为它唯一的数据源是被我们删掉的 `app/api/heming`。
+但合盘本身是有用的 —— 缺的只是 AI，而 AI 已经有了（宿主 `/ziwei/ai`）。
+
+- 恢复 `app/heming/page.tsx` 与 `lib/ziwei/heming-knowledge.ts`（从删除前那次提交取回）；
+- 页面改为 `POST /ziwei/ai`：`topic: 'heming'` + `digest`（甲方）+ `digestB`（乙方），
+  SSE 解析按宿主的 `delta` / `error` / `done` 事件格式重写；带 `x-ziwei-thread` 复用会话；
+- host 半：`TOPIC_PROMPTS.heming`（合盘五节：定性 / 性格契合 / 对应宫位 / 互补冲突 / 相处建议），
+  `buildMessages` 支持 `digestB`，按【甲方命盘】【乙方命盘】分别拼进 prompt；
+- 小节标题兼容 `**【小节】**` 与 `【小节】` 两种写法（模型两种都会写）；
+- 顶栏「‹ 返回」→「‹ 排盘」；
+- 面板 `VIEWS` 恢复「合盘」tab（排盘 / 合盘 / 古籍 / 百科）；
+- 验收：`verify.mjs` 新增「面板能切到合盘」与「合盘分析由 DSH 模型生成」（读
+  `[data-heming-analysis]`，等追问框出现或文本稳定后再断言）。
+
+**踩坑**：`process.env.NEXT_PUBLIC_BASE_PATH` 就是 `/ziwei`（basePath），而宿主路由也叫 `/ziwei/ai`，
+所以 fetch 要写 `${BASE}/ai`；写成 `${BASE}/ziwei/ai` 会变成 `/ziwei/ziwei/ai` → 404。
+
+---
+
 ## 提交记录
 
 ```text
@@ -242,6 +263,8 @@ d2872bf fix(app): 百科详情页不再 404
 83a86c3 refactor(app): 去掉开源站点痕迹，只保留插件形态
 3cf9704 feat(app): 排盘页加「最近生辰」与「复制盘面摘要」
 1b73ba8 test(verify): 覆盖最近生辰与复制摘要，去掉合盘断言
+5741eb5 docs(changelog): 补提交记录
+f913e53 feat(heming): 合盘页回归，解读改由 DSH 模型提供
 ```
 
 约定见 README「提交约定」：Conventional Commits + 中文摘要，一次提交只做一件事。
@@ -250,6 +273,6 @@ d2872bf fix(app): 百科详情页不再 404
 
 | 脚本 | 项数 | 覆盖 |
 | --- | --- | --- |
-| `verify.mjs`（`--ask`） | 42 | 侧栏入口与顺序、鉴权 401、面板与三个视图、起盘、配色、版面撑满、宠物让位、生辰服务端存储、最近生辰、复制盘面摘要、解读面板（自动生成/切 tab/追问）、概览抽屉、点星详情、分享卡与分享链接、「让 DSH 解读」建会话 + 草稿 + 剪贴板、无 console 报错 |
+| `verify.mjs`（`--ask`） | 44 | 侧栏入口与顺序、鉴权 401、面板与三个视图、起盘、配色、版面撑满、宠物让位、生辰服务端存储、最近生辰、复制盘面摘要、解读面板（自动生成/切 tab/追问）、概览抽屉、点星详情、分享卡与分享链接、「让 DSH 解读」建会话 + 草稿 + 剪贴板、无 console 报错 |
 | `app/test-persistence.mjs` | 16 | 清空 → 起盘写配置 → 重载恢复 → 换浏览器上下文恢复 → 重新起盘回填 → 忘记清空 → 还原原记录 |
 | `app/npm test` | 10 | 排盘内核回归（盘面完整性、DST、节气边界、红鸾天喜、双四化、命名中立性…） |

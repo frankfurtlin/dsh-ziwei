@@ -40,7 +40,8 @@ x-ziwei-thread: 6f1c2b0e-3a44-4f0b-9c1d-2f4a5c6d7e8f
 | 字段 | 必填 | 限制 | 说明 |
 | --- | --- | --- | --- |
 | `digest` | ✅ | ≤ 16000 字符 | 盘面摘要，由应用 `lib/ziwei/digest.ts` 的 `digestChart()` 生成（纯文本，星/宫/四化结构化列出） |
-| `topic` | | — | `overview` / `love` / `career` / `wealth` / `health` / `personality`，决定提示词模板；缺省 `overview` |
+| `topic` | | — | `overview` / `love` / `career` / `wealth` / `health` / `personality` / `heming`，决定提示词模板；缺省 `overview` |
+| `digestB` | | ≤ 16000 字符 | 第二张盘（乙方）的摘要，仅 `topic: "heming"` 时使用；两段会分别标成【甲方命盘】【乙方命盘】 |
 | `question` | | ≤ 2000 字符 | 追问内容，空则是「按主题自动解读」 |
 | `history` | | 只取最后 8 轮 | 追问时带上上下文，`role` 为 `user` / `assistant` |
 
@@ -97,6 +98,11 @@ curl -N -b /tmp/jar -X POST http://127.0.0.1:3080/ziwei/ai \
   -H 'content-type: application/json' \
   -H "x-ziwei-thread: debug-thread-0001" \
   -d '{"topic":"overview","digest":"【基本信息】公历：1990年6月15日 午时（男）\n【十二宫】命宫（丑）：紫微、天相"}'
+
+# 合盘：两张盘一起发
+curl -X POST http://127.0.0.1:3080/ziwei/ai -H 'content-type: application/json' \
+  -H 'x-ziwei-thread: heming-demo-0001' \
+  -d '{"topic":"heming","digest":"【甲方命盘】…","digestB":"【乙方命盘】…","question":"适合合伙创业吗？"}'
 ```
 
 ---

@@ -6,7 +6,7 @@
 - 服务：`dsh-ziwei-app.service`，`node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 8815`
 - `basePath = /ziwei`（`next.config.js` 与 `NEXT_PUBLIC_BASE_PATH` 一致），所以所有路由都是 `/ziwei/...`
 - 环境：`NODE_ENV=production`，`EnvironmentFile=app/.env.local`；应用不需要任何密钥（解读走宿主的 `/ziwei/ai`）
-- 已删除的页面：`/heming`（合盘，依赖应用内 AI）、`/preview`（开场动画）、`/privacy`、`/terms`、
+- 已删除的页面：`/preview`（开场动画）、`/privacy`、`/terms`、
   `robots.txt`、`sitemap.xml` —— 它们是原开源站点的落地页/合规页，插件内既无入口也无意义
 
 ## 路由表
@@ -14,6 +14,7 @@
 | 路由 | 文件 | 在插件里怎么进 |
 | --- | --- | --- |
 | `/ziwei/chart` | `app/chart/page.tsx` | 面板「排盘」（默认视图） |
+| `/ziwei/heming` | `app/heming/page.tsx` | 面板「合盘」（解读走宿主 `/ziwei/ai`，`topic: 'heming'`） |
 | `/ziwei/library`、`/ziwei/library/[book]`、`/ziwei/library/[book]/[chapter]`、`/ziwei/library/search` | `app/library/**` | 面板「古籍」 |
 | `/ziwei/knowledge`、`/ziwei/knowledge/[star]/[topic]` | `app/knowledge/**` | 面板「百科」 |
 | `/ziwei`、`/ziwei/` | `app/page.tsx` | 308/307 重定向到 `/ziwei/chart`（插件内没有落地页） |
@@ -87,6 +88,7 @@
 | `shier-shen.ts` | 将前十二神 / 岁前十二神 |
 | `school-config.ts` / `school-data.ts` / `school-tables.generated.ts` | 9 类排盘流派开关与安星整数表（生成文件勿手改） |
 | `digest.ts`（91 行） | **为插件新加**：把 `ZiweiChart` 压成给模型看的纯文本摘要 |
+| `heming-knowledge.ts` | 合盘页用的宫位/关系断语素材 |
 | `db-analysis.ts` | 断语库占位（`STAR_DB` 为空；逐宫断语改由 DSH 的模型现场生成） |
 | `famous.ts` | 名人命盘样本（只被回归测试用；页面已无入口） |
 | `share.ts` / `yunxian-context.ts` | 分享参数编解码、运限视图上下文 |
