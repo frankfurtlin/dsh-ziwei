@@ -261,10 +261,16 @@ window.__ModuleLoader__.load({
         var prompt = buildPrompt(digest, question);
         // 会话草稿在宿主的 Lexical 编辑器里，插件无法直接写；startSession 的 prompt
         // 选项在本版本不落到编辑器，所以同时把命盘文本放进剪贴板作为兜底。
+        // 记下当前已有的输入框：新会话的编辑器是重新挂载的，写入时避开这些旧节点。
+        var before = composerSnapshot();
         copyText(prompt).then(setCopied);
         Promise.resolve(askDsh(prompt)).then(function (ok) {
-          if (ok) setSent(true);
-          if (ok) fillComposer(prompt);
+          if (!ok) return;
+          setSent(true);
+          fillComposer(prompt, before).then(function (filled) {
+            // 没写进编辑器时把提示切回「用剪贴板粘贴」，不要谎报已填好。
+            if (!filled) setCopied(true);
+          });
         });
       }
 
@@ -273,17 +279,30 @@ window.__ModuleLoader__.load({
        * 于是等新会话的输入框出现后，用浏览器原生的插入命令把文本「粘」进去
        * （等价于用户粘贴，可撤销）；失败则退化为只给剪贴板。
        */
-      /** 找到会话输入框：优先 Lexical 编辑器本体，退 textarea。 */
-      function findComposer() {
-        var selectors = [
-          '[data-lexical-editor="true"]',
-          '[contenteditable="true"][role="textbox"]',
-          '[contenteditable="true"]',
-          'textarea',
-        ];
-        for (var i = 0; i < selectors.length; i += 1) {
-          var node = document.querySelector(selectors[i]);
-          if (node) return node;
+      var COMPOSER_SELECTOR = [
+        '[data-lexical-editor="true"]',
+        '[contenteditable="true"][role="textbox"]',
+        '[contenteditable="true"]',
+        'textarea',
+      ].join(',');
+
+      /** 当前页面上所有候选输入框（用来识别「切会话之后才挂载的新编辑器」）。 */
+      function composerSnapshot() {
+        return Array.prototype.slice.call(document.querySelectorAll(COMPOSER_SELECTOR));
+      }
+
+      /**
+       * 找到会话输入框：优先 Lexical 编辑器本体，退 textarea。
+       *
+       * `avoid` 里是切换会话之前就存在的编辑器：新会话的编辑器是重新挂载的，
+       * 如果命中旧节点，说明面板还没切过去 —— 这时千万别往里写，
+       * 否则命盘 prompt 会落到上一个会话的草稿里。
+       */
+      function findComposer(avoid) {
+        var nodes = composerSnapshot();
+        for (var i = 0; i < nodes.length; i += 1) {
+          if (avoid && avoid.indexOf(nodes[i]) !== -1) continue;
+          return nodes[i];
         }
         return null;
       }
@@ -322,13 +341,17 @@ window.__ModuleLoader__.load({
        * 会议话页有时要好几秒才挂载（工作区多、会话列表在加载），所以轮询 15 秒；
        * 写进去后还读回来校验一次，React 把内容重置掉就再写一遍。
        */
-      function fillComposer(text) {
+      var fillSeq = 0;
+      function fillComposer(text, avoid) {
+        fillSeq += 1;
+        var token = fillSeq;
         var deadline = Date.now() + 15000;
         var needle = text.slice(0, 12);
         return new Promise(function (resolve) {
           var tries = 0;
           function attempt() {
-            var editor = findComposer();
+            if (token !== fillSeq) return resolve(false);
+            var editor = findComposer(avoid);
             if (!editor) {
               if (Date.now() > deadline) return resolve(false);
               return setTimeout(attempt, 250);
@@ -559,9 +582,9 @@ window.__ModuleLoader__.load({
             console.warn("[dsh-ziwei] uiWorkspace 不可用，无法新建会话");
             return false;
           }
-          // 必须等 startSession 完成再切面板：提前切走会让这次会话请求被后来的导航取代，
-          // 会话虽被创建但不会打开，预填的 prompt 也就丢了。
-          await navigation.startSession(workspaceId, { prompt: prompt, whenDraftExists: "append" });
+          // 注意：宿主的 startSession 是**同步 void**（navigation.d.ts），await 是空操作。
+          // 别指望它「等会话建好」；会话是否真的打开要靠下面切面板 + 新编辑器出现来确认。
+          navigation.startSession(workspaceId, { prompt: prompt, whenDraftExists: "append" });
           if (layout && typeof layout.selectPanel === "function") layout.selectPanel(null);
           return true;
         } catch (error) {
