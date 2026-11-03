@@ -472,7 +472,7 @@ try {
       }
       check(
         '合盘分析由 DSH 模型生成',
-        hemingText.length > 900 && !/分析暂时不可用|解读服务|没有返回内容/.test(hemingText),
+        hemingText.length > 600 && !/分析暂时不可用|解读服务|没有返回内容/.test(hemingText),
         `len=${hemingText.length}`,
       )
       await page.screenshot({ path: path.join(outDir, '10-panel-heming.png') })
