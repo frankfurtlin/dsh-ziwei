@@ -246,6 +246,32 @@
 **踩坑**：`process.env.NEXT_PUBLIC_BASE_PATH` 就是 `/ziwei`（basePath），而宿主路由也叫 `/ziwei/ai`，
 所以 fetch 要写 `${BASE}/ai`；写成 `${BASE}/ziwei/ai` 会变成 `/ziwei/ziwei/ai` → 404。
 
+
+## 14. 一轮「隐藏 bug」清剿
+
+用户反馈「看看还有啥隐藏的bug」后，用静态审计 + playwright 边界实测扫了一遍，修掉下面这些。
+
+**高危**
+
+- **排盘页白屏**：分享链接里写了不存在的日期（`?b=1990-2-31-5`）时，`generateChart` 抛 `RangeError: solar date does not exist`，React 整页崩成白屏（body 只剩 70 字符）。现在 `readSharedBirth` 用 `isRealDate` 校验真实存在，起盘统一走 `safeChart()`（先校验、再 try/catch），失败回落到表单并显示 `data-ziwei-error` 提示条。
+- **服务端曾接受 2 月 31 日**：`POST /ziwei/birth` 只校验范围（day 1–31），把不存在的日期写进配置文件后，每次打开排盘页都会崩，而且坏记录留在 `history` 里会一直被「最近生辰」点出来。现在 `isBirthInfo` 用 UTC 回读校验真实日期，非法直接 400；现网那条坏记录也清了。
+- **晚子时两页排不同的盘**：排盘页直接吃 `BirthForm` 给的日期，合盘页走 `formToBirthInfo`（23:00–23:59 按次日）。同一生辰在两页会排出不同的农历日/紫微/四化。现在排盘页也统一走 `formToBirthInfo`（实测 1990-06-15 23:30 存成 06-16 子时）。
+- **命盘 prompt 可能写进上一个会话**：宿主的 `uiWorkspace.startSession()` 是**同步 void**（`navigation.d.ts` 里就这么声明），`await` 是空操作，于是切面板立刻发生、`fillComposer` 用全局选择器轮询时命中的还是旧会话的 Lexical 编辑器。现在写入前先记下已有编辑器的快照，只往「切换之后新挂载」的编辑器里写；连续点击用序列号取消上一次填充。
+
+**中危**
+
+- **并发保存丢历史**：`birth.json` 是「读旧文件→改→写」，两个标签页同时保存会互相覆盖（实测 8 个并发 POST 只剩 1 条）。`lib/birth-store.js` 现在有进程内写队列（读改写串行）+ 唯一临时文件名；坏文件不再静默丢，先备份成 `birth.json.corrupt-<ts>` 再当空存储。
+- **上游卡住会挂死 handler**：反代没有 `setTimeout`。现在 10 秒超时回 504。
+- **换盘后旧盘上下文还在**：`<InsightPanel>` 没有 `key`，换一张盘后旧盘的解读正文与追问历史继续作为上下文发给模型。现在按盘面摘要做 `key`，换盘即重建面板。
+- **未知 topic 返回 500**：`/ziwei/knowledge/ziwei/bogus` 会走到 `withPalace(undefined)` 抛错。现在星级/topic 校验不过直接 `notFound()`（实测 404）。
+- **413 是死代码**：`readBody` 超限时先 `req.destroy()` 再回包，客户端只会看到连接重置（curl 报 000）。现在先 `pause`、回可读的 413、再 `res.on('finish')` 断开；`/ziwei/ai` 与 `/ziwei/birth` 都实测能拿到 `{"error":"请求体超过 256 KiB"}`。
+- **未捕获异常会带崩整个 dsh 进程**：`handleBirthRequest` 在 `createHandler` 里是裸调用，一次异常的 unhandled rejection 就会让宿主退出（实测崩过一次）。现在补了 `.catch` 兜底。
+- **解读面板错误文案**：直连 8815 或登录过期时会显示原始「解读服务返回 404」。现在 40x 映射成「解读服务不可用（可能登录状态已过期…）」，并补了卸载时 abort 在途请求。
+
+**验收**
+
+`verify.mjs --ask` 在测试实例 **44/44 通过**（含草稿填充、合盘 1043 字、宠物不遮挡、分享下载）；`app/test-persistence.mjs` 16/16；`app/npm test` 10/10。
+
 ---
 
 ## 提交记录
@@ -265,6 +291,12 @@ d2872bf fix(app): 百科详情页不再 404
 1b73ba8 test(verify): 覆盖最近生辰与复制摘要，去掉合盘断言
 5741eb5 docs(changelog): 补提交记录
 f913e53 feat(heming): 合盘页回归，解读改由 DSH 模型提供
+cd6c769 docs: 同步合盘回归（四视图、digestB 接口、changelog 13）
+a6c2a61 fix(host): 请求体超限回可读 413，反代超时回 504，生辰接口兜住异常
+604f0c1 fix(store): 生辰配置读写串行化，坏文件先备份再降级
+cc716a2 fix(app): 非法日期不再白屏，晚子时口径统一，换盘重置解读
+ee43088 fix(panel): 命盘 prompt 只写进切换后的新编辑器
+0d43b46 test(verify): 合盘断言放宽到长度与无错误串
 ```
 
 约定见 README「提交约定」：Conventional Commits + 中文摘要，一次提交只做一件事。
