@@ -237,6 +237,11 @@ c00ce95 feat(panel): 增加排盘/合盘/古籍/百科四个二级入口
 5b2b83f feat(app): 把排盘应用收进插件仓库（app/）
 a01c47f docs: 补齐插件文档（架构/接口/能力地图/部署/变更记录）
 c61500d fix(host): 502 文案与验收脚本指向搬移后的应用
+d2872bf fix(app): 百科详情页不再 404
+09aa149 docs(changelog): 记录百科详情页 404 的根因与修法
+83a86c3 refactor(app): 去掉开源站点痕迹，只保留插件形态
+3cf9704 feat(app): 排盘页加「最近生辰」与「复制盘面摘要」
+1b73ba8 test(verify): 覆盖最近生辰与复制摘要，去掉合盘断言
 ```
 
 约定见 README「提交约定」：Conventional Commits + 中文摘要，一次提交只做一件事。
