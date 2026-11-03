@@ -274,6 +274,33 @@
 
 ---
 
+## 15. 收紧对外暴露的信息
+
+用户看了上一轮的「已知但未动」后说「收紧一下」。这一轮不新增功能，只把回给浏览器的文案与
+路径里多余的内部信息拿掉；诊断信息全部改走宿主日志。
+
+- **不再回本机绝对路径**：`GET/POST /ziwei/birth` 的 `file` 从 `/root/.dsh/ziwei/birth.json`
+  改成 `ziwei/birth.json`（相对 `$DSH_HOME`）。绝对路径会漏出用户名与目录结构。
+- **反代失败文案去内部细节**：502 从「紫微斗数应用暂时不可用（ECONNREFUSED）。请确认本地服务
+  在跑：`systemctl status dsh-ziwei-app.service`」改成「紫微斗数应用暂时不可用，请稍后重试。」；
+  504 同样只留「响应超时，请稍后重试。」。错误码、目标端口、Unit 名只写
+  `console.warn('[dsh-ziwei] 反代失败（…）: GET /ziwei/… → 127.0.0.1:8815')`。
+- **解读失败不再回原始错误**：模型的 `finish.kind === 'error'` 与外层 catch 以前会把
+  provider 侧的 `failure.message` 直接塞进 SSE。现在统一成「模型这次没有给出结果，请稍后重试。」
+  /「解读生成失败，请稍后再试。」/「解读被取消或超时了，再点一次即可。」，原始异常只进
+  `console.error('[dsh-ziwei] 解读失败:', error)`；400/413 仍保留可操作的中文说明。
+- **`done` 事件不再带 `provider`/`model`**：界面用不到，去掉少一处指纹。
+- **出生信息校验失败之外的 500 也收口**：`handleBirthRequest` 的兜底 catch 以前回
+  `error.message`，现在回「生辰存储暂时不可用，请稍后再试。」。
+- **`sendPayloadTooLarge` 之后仍会断开连接**（`res.on('finish')` 再 `req.destroy()`），
+  413 可读这件事保持不变。
+
+**验收**：新增两条断言——`verify.mjs` 里「生辰接口只回相对位置，不泄漏本机绝对路径」、
+`app/test-persistence.mjs` 的 `file` 断言加「不以 `/` 开头」。生产 44 项、persistence 16 项、
+内核回归 10 项全通过。
+
+---
+
 ## 提交记录
 
 ```text

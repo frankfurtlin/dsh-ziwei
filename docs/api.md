@@ -58,7 +58,7 @@ data: {"type":"delta","text":"先说结论："}
 
 data: {"type":"delta","text":"你这张盘在感情上…"}
 
-data: {"type":"done","provider":"opencode-go","model":"deepseek-v4.1-flash"}
+data: {"type":"done"}
 ```
 
 | 事件 | 字段 | 前端怎么用 |
@@ -66,7 +66,7 @@ data: {"type":"done","provider":"opencode-go","model":"deepseek-v4.1-flash"}
 | `reasoning` | `chars` | 只报「思考了多少字」，面板显示「模型正在思考这张盘…（已思考 N 字）」 |
 | `delta` | `text` | 正文增量，直接追加渲染 |
 | `error` | `message` | 红字提示；`done` 仍会跟着发一条 |
-| `done` | `provider`/`model`（出错时为空） | 收尾，stop loading |
+| `done` | 无字段 | 收尾，stop loading；不再回报 provider/model（界面用不到，少一处指纹） |
 
 设计要点（都是踩过坑才加上的）：
 
@@ -132,7 +132,7 @@ curl -X POST http://127.0.0.1:3080/ziwei/ai -H 'content-type: application/json' 
 ### `GET`
 
 ```json
-{ "ok": true, "current": { … } | null, "history": [ … ], "file": "/root/.dsh/ziwei/birth.json" }
+{ "ok": true, "current": { … } | null, "history": [ … ], "file": "ziwei/birth.json" }
 ```
 
 ### `POST`
@@ -142,8 +142,11 @@ curl -X POST http://127.0.0.1:3080/ziwei/ai -H 'content-type: application/json' 
   "form": { "year": "1990", "month": "6", "day": "15", "hour": "5", "minute": "30", "gender": "male" } }
 ```
 
-返回 `{ ok: true, current: {…}, file: "…" }`。`info` 非法（年月日/时辰越界、gender 不是
-`male|female`）→ 400。
+返回 `{ ok: true, current: {…}, file: "ziwei/birth.json" }`。`info` 非法（年月日/时辰越界、
+gender 不是 `male|female`）→ 400。
+
+> `file` 只回相对 `$DSH_HOME` 的位置。真实路径（`/root/.dsh/ziwei/birth.json`）不会出现在
+> 任何响应里：绝对路径会漏出用户名与本机目录结构。
 
 ### `DELETE`
 
@@ -165,8 +168,9 @@ curl -X POST http://127.0.0.1:3080/ziwei/ai -H 'content-type: application/json' 
 - 剥掉 hop-by-hop 头（`connection`、`keep-alive`、`proxy-*`、`te`、`trailer`、
   `transfer-encoding`、`upgrade`），补 `x-forwarded-host/proto/for`；
 - 响应体直接 pipe 回浏览器，静态资源、SSE、Range 都照常；
-- 上游连不上 → **502**，正文提示「紫微斗数应用暂时不可用（ECONNREFUSED）。请确认本地服务在跑：
-  `systemctl status dsh-ziwei-app.service`」；
+- 上游连不上 → **502**，正文只提示「紫微斗数应用暂时不可用，请稍后重试。」；错误码与
+  单元名只写宿主日志（`console.warn('[dsh-ziwei] 反代失败（ECONNREFUSED）…')`）；
+- 上游 10 秒不响应 → **504**「紫微斗数应用响应超时，请稍后重试。」；
 - 客户端断开 → 立刻销毁上游请求，不留悬挂连接。
 
 面板里看到「应用暂时不可用」，基本都是 `dsh-ziwei-app.service` 没起来
