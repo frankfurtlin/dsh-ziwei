@@ -26,9 +26,11 @@ import {
 } from '@/lib/seo/knowledge';
 import { SITE_URL } from '@/lib/site';
 
-// 允许动态参数：如果某个 star/topic 组合不在 generateStaticParams 列表中
-// 也允许运行时按需渲染，避免中文 URL 编码问题导致 404
-export const dynamicParams = false;
+// 允许动态参数：本仓库是开源排盘引擎版，`STAR_DB`（逐宫论断内容库）不在开源范围，
+// `generateStaticParams()` 因此返回 0 条路由；如果这里是 false，任何 /knowledge/<star>/<topic>
+// 都会 404（百科列表里的卡片全部点不进去）。改成 true 后由运行时渲染，页面内部按
+// 「内容是否存在」分支，缺内容时给出说明与替代入口，而不是死链接。
+export const dynamicParams = true;
 
 export async function generateStaticParams() {
   const routes = getAllKnowledgeRoutes();
@@ -41,11 +43,21 @@ export async function generateMetadata({ params }: { params: Promise<{ star: str
   const star = SLUG_TO_STAR[slug];
   if (!star) return {};
   const data = getKnowledge(star, topic as TopicKey);
-  if (!data.exists) return {};
+  // TOPIC_PALACE_NAME 里「命宫」自带「宫」字，其余是「夫妻」「官禄」这种；统一成「XX宫」
+  const palaceName = withPalace(data.palaceName);
+  if (!data.exists) {
+    // 开源版没有逐宫论断内容库：给一个正经标题，但标 noindex，避免把空壳页喂给搜索引擎
+    return {
+      title: `${star}入${palaceName} · ${data.topicLabel}`,
+      description: STAR_BRIEF_SEO[star]
+        || `${star}入${palaceName}的紫微斗数知识页（开源排盘引擎版暂未收录逐宫论断正文）。`,
+      robots: { index: false, follow: false },
+    };
+  }
 
-  const title = `${star}入${data.palaceName}宫 · ${data.topicLabel} · 倪海厦体系详解`;
+  const title = `${star}入${palaceName} · ${data.topicLabel} · 倪海厦体系详解`;
   const description = data.parsed.dingdiao
-    || `${star}入${data.palaceName}宫的紫微斗数解读 — 基于倪海厦《天纪》体系与古籍《紫微斗数全集》《骨髓赋》。`;
+    || `${star}入${palaceName}的紫微斗数解读 — 基于倪海厦《天纪》体系与古籍《紫微斗数全集》《骨髓赋》。`;
 
   return {
     title,
@@ -61,7 +73,7 @@ export async function generateMetadata({ params }: { params: Promise<{ star: str
     },
     keywords: [
       '紫微斗数', '倪海厦', star, data.palaceName, data.topicLabel,
-      `${star}${data.palaceName}`, `${star}入${data.palaceName}`,
+      `${star}${data.palaceName}`, `${star}入${palaceName}`,
       `紫微斗数 ${star}`, '倪海厦紫微斗数', '紫微斗数全集',
     ],
   };
@@ -71,8 +83,10 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
   const { star: slug, topic } = await params;
   const star = SLUG_TO_STAR[slug];
   if (!star) notFound();
+  // 开源版没有 STAR_DB：data.exists 恒为 false。这里不再直接 notFound()，
+  // 否则百科列表里 14×13 张卡片全是死链；缺内容时下面会渲染一段说明 + 替代入口。
   const data = getKnowledge(star, topic as TopicKey);
-  if (!data.exists) notFound();
+  const palaceName = withPalace(data.palaceName);
 
   // 同主星其他 topic
   const otherTopicsForStar = ALL_TOPICS.filter(t => t !== topic && getKnowledge(star, t).exists);
@@ -83,7 +97,7 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Article',
-    headline: `${star}入${data.palaceName}宫 · ${data.topicLabel}`,
+    headline: `${star}入${palaceName} · ${data.topicLabel}`,
     description: data.parsed.dingdiao,
     author: { '@type': 'Organization', name: '紫微研究 · 倪海厦正宗' },
     publisher: {
@@ -100,7 +114,9 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
 
   return (
     <div style={{ background: 'var(--bg-page)', minHeight: '100vh' }}>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      {data.exists && (
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      )}
 
       {/* 顶栏 */}
       <div className="px-6 py-4 flex items-center justify-between"
@@ -125,7 +141,7 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
           <span style={{ margin: '0 8px' }}>/</span>
           <span>{star}</span>
           <span style={{ margin: '0 8px' }}>·</span>
-          <span style={{ color: 'var(--ac)' }}>{data.palaceName}宫</span>
+          <span style={{ color: 'var(--ac)' }}>{palaceName}</span>
         </nav>
 
         {/* 标题区 */}
@@ -134,7 +150,7 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
             {data.topicLabel} · 倪海厦体系详解
           </div>
           <h1 style={{ fontSize: 'clamp(28px, 5vw, 44px)', fontWeight: 700, color: 'var(--tx-0)', letterSpacing: '0.1em', lineHeight: 1.2 }}>
-            {star}入{data.palaceName}宫
+            {star}入{palaceName}
           </h1>
           {STAR_BRIEF_SEO[star] && (
             <p style={{ fontSize: '13px', color: 'var(--tx-2)', marginTop: '14px', lineHeight: 1.8 }}>
@@ -142,6 +158,22 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
             </p>
           )}
         </header>
+
+        {/* 内容缺失时的说明（开源排盘引擎版没有逐宫论断内容库） */}
+        {!data.exists && (
+          <Section title="本页暂无收录的论断正文" gradient>
+            <p style={{ fontSize: '14px', color: 'var(--tx-0)', lineHeight: 2, marginBottom: '10px' }}>
+              这一版是<strong>开源排盘引擎</strong>：安星、四化、格局、古籍原典都完整开放，
+              但「{star}入{palaceName} · {data.topicLabel}」的逐宫论断内容库不在开源范围，
+              所以这一页没有对应的正文。
+            </p>
+            <p style={{ fontSize: '13px', color: 'var(--tx-2)', lineHeight: 1.9 }}>
+              你可以：看上方这颗星的基本属性 →{' '}
+              <Link href="/library" style={{ color: 'var(--ac)', textDecoration: 'none' }}>去古籍库读原典</Link> →{' '}
+              <Link href="/chart" style={{ color: 'var(--ac)', textDecoration: 'none' }}>起一张盘，让 DSH 的模型针对你的盘解读</Link>。
+            </p>
+          </Section>
+        )}
 
         {/* 内容 4 段 */}
         {data.parsed.dingdiao && (
@@ -207,7 +239,8 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
           </Link>
         </div>
 
-        {/* 内链：同主星其他 topic */}
+        {/* 内链：同主星其他 topic（开源版没有内容库时这一组为空，整块不渲染） */}
+        {otherTopicsForStar.length > 0 && (
         <Section title={`${star}星的其他宫位解读`} minimal>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
             {otherTopicsForStar.map(t => {
@@ -226,15 +259,17 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
                     textDecoration: 'none',
                   }}
                 >
-                  {star}入{d.palaceName}
+                  {star}入{withPalace(d.palaceName)}
                 </Link>
               );
             })}
           </div>
         </Section>
+        )}
 
         {/* 内链：同 topic 其他主星 */}
-        <Section title={`其他主星入${data.palaceName}宫的解读`} minimal>
+        {otherStarsForTopic.length > 0 && (
+        <Section title={`其他主星入${palaceName}的解读`} minimal>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
             {otherStarsForTopic.slice(0, 13).map(s => (
               <Link
@@ -250,11 +285,12 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
                   textDecoration: 'none',
                 }}
               >
-                {s}入{data.palaceName}
+                {s}入{palaceName}
               </Link>
             ))}
           </div>
         </Section>
+        )}
 
         {/* 古籍库链接 */}
         <div style={{
@@ -281,6 +317,10 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
       </footer>
     </div>
   );
+}
+
+function withPalace(name: string): string {
+  return name.endsWith('宫') ? name : `${name}宫`;
 }
 
 function Section({ title, children, gradient, minimal }: { title: string; children: React.ReactNode; gradient?: boolean; minimal?: boolean }) {
