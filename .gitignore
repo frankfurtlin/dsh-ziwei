@@ -1,0 +1,9 @@
+# 依赖与本地运行产物
+node_modules/
+*.log
+
+# 验收证据（verify.mjs / restart-and-verify.sh 生成：截图 + report.json + 重启日志）
+verification/
+
+# 系统杂项
+.DS_Store

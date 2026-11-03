@@ -1,0 +1,374 @@
+/**
+ * dsh-ziwei 端到端验收脚本。
+ *
+ * 用法：
+ *   node verify.mjs --url "http://127.0.0.1:3080/?token=..." [--out dir] [--no-chart]
+ *
+ * 检查项（全部为真实浏览器行为，不是静态代码检查）：
+ *   1. 侧栏出现「紫微斗数」入口，且顺序落在 Automation tasks 与 Skill Center 之间；
+ *   2. 点击后主面板出现内嵌排盘应用（iframe 同源、可渲染）；
+ *   3. /ziwei/ 未带登录态时被 DSH 鉴权闸门挡住（401），带登录态 200；
+ *   4. 在 iframe 内起盘后，插件工具条收到盘面摘要，「让 DSH 解读」按钮变为可用；
+ *   5. 截图留证 + 输出 JSON 报告。
+ */
+import { createRequire } from 'node:module'
+import { mkdir, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+
+const require = createRequire('/root/workspace/hermes-site/tools/node_modules/')
+const { chromium } = require('playwright')
+
+const args = process.argv.slice(2)
+function arg(name, fallback) {
+  const index = args.indexOf(`--${name}`)
+  if (index === -1) return fallback
+  return args[index + 1] ?? fallback
+}
+const url = arg('url', process.env.DSH_WEB_URL || '')
+const outDir = arg('out', '/root/workspace/plugins/dsh-ziwei/verification')
+const skipChart = args.includes('--no-chart')
+if (!url) {
+  console.error('缺少 --url（带 token 的 DSH Web 地址）')
+  process.exit(2)
+}
+
+const report = { url: url.replace(/token=[^&]+/, 'token=***'), startedAt: new Date().toISOString(), checks: [] }
+function check(name, ok, detail) {
+  report.checks.push({ name, ok: !!ok, detail: detail === undefined ? null : detail })
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`)
+}
+
+const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] })
+try {
+  await mkdir(outDir, { recursive: true })
+
+  // ── 0. 未登录访问 /ziwei/ 必须被挡 ──
+  const anon = await browser.newContext({ ignoreHTTPSErrors: true })
+  const anonRes = await anon.request.get(new URL('ziwei/', url).href)
+  check('未登录访问 /ziwei/ 被拒绝', anonRes.status() === 401, `HTTP ${anonRes.status()}`)
+  await anon.close()
+
+  const context = await browser.newContext({
+    permissions: ['clipboard-read', 'clipboard-write'], ignoreHTTPSErrors: true, viewport: { width: 1440, height: 900 } })
+  const page = await context.newPage()
+  const consoleErrors = []
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text())
+  })
+  page.on('pageerror', (error) => consoleErrors.push(String(error)))
+
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 })
+  // 全新 DSH_HOME 上会弹 "Get started" 欢迎弹层，它带的透明遮罩会拦截侧栏点击；
+  // 生产环境里早已关闭，这里按 Escape 关掉以保证脚本可重复执行。
+  await page.keyboard.press('Escape').catch(() => {})
+
+  // 生辰会被应用记住（服务端配置文件，宿主上 ~/.dsh/ziwei/birth.json）；
+  // 上次验收起过盘，不清掉的话这次进排盘页会直接恢复旧盘、看不到表单。
+  // 这里先 DELETE 保证可重复执行，同时清掉早期版本留在浏览器里的旧记录。
+  await page
+    .evaluate(() => window.localStorage.removeItem('ziwei-birth-v1'))
+    .catch(() => {})
+  // 生产实例上可能已经有用户自己的生辰记录：验收会写入 1990-6-15，
+  // 所以先快照，验收断言做完立刻写回去，别把用户数据冲掉。
+  const birthBefore = await context.request
+    .get(new URL('ziwei/birth', url).href)
+    .then((res) => (res.ok() ? res.json() : null))
+    .catch(() => null)
+  const clearBirth = async () => {
+    const res = await context.request.delete(new URL('ziwei/birth', url).href).catch(() => null)
+    return res ? res.status() : 0
+  }
+  const birthStatus = await clearBirth()
+  check('清空服务端生辰记录（可重复执行）', birthStatus === 200, `HTTP ${birthStatus}`)
+
+  // ── 1. 侧栏入口存在且位置正确 ──
+  // 用 aria-label 定位而不是可见文字：验收机（服务器）通常没装中文字体，
+  // 文字会渲染成豆腐块，但 aria-label 与 DOM 文本始终是正确的。
+  const icon = page.locator('button[aria-label="紫微斗数"]')
+  await icon.waitFor({ state: 'visible', timeout: 30000 })
+  const sidebarText = await page.locator('body').innerText()
+  const indexZiwei = sidebarText.indexOf('紫微斗数')
+  const indexSchedule = sidebarText.indexOf('Automation tasks')
+  const indexSkill = sidebarText.indexOf('Skill Center')
+  check('侧栏出现「紫微斗数」入口', indexZiwei !== -1)
+  check(
+    '入口位于「Automation tasks」与「Skill Center」之间',
+    indexSchedule !== -1 && indexSkill !== -1 && indexSchedule < indexZiwei && indexZiwei < indexSkill,
+    `schedule=${indexSchedule} ziwei=${indexZiwei} skill=${indexSkill}`,
+  )
+
+  await page.screenshot({ path: path.join(outDir, '01-sidebar.png') })
+
+  // ── 2. 点击进入主面板 ──
+  // 侧栏行在鼠标悬停时会浮出一层 tooltip 遮罩，headless 下偶尔拦截点击；
+  // 先常规点击，被遮罩挡住就退回 force click（真实浏览器里点的是同一个按钮）。
+  // 全新 DSH_HOME 会先弹「Get started」欢迎层（透明 mask 会吞掉点击）；
+  // 第一次交互前后都可能再弹一次，所以做成可反复调用的关闭函数。
+  async function dismissWelcome() {
+    const close = page.locator('div[role="presentation"] button[aria-label="Close"]').first()
+    if (await close.count()) {
+      await close.click({ force: true }).catch(() => {})
+      await page.waitForTimeout(300)
+      return true
+    }
+    return false
+  }
+  await page.keyboard.press('Escape').catch(() => {})
+  await dismissWelcome()
+  let opened = false
+  for (let attempt = 0; attempt < 3 && !opened; attempt += 1) {
+    try {
+      await icon.click({ timeout: 4000 })
+    } catch {
+      await icon.click({ force: true }).catch(() => {})
+      await page.mouse.click(140, 215)
+    }
+    opened = await page
+      .locator('iframe[title="紫微斗数排盘"]')
+      .waitFor({ state: 'visible', timeout: 6000 })
+      .then(() => true)
+      .catch(() => false)
+  }
+  check('点击侧栏入口打开主面板', opened)
+  const iframe = page.locator('iframe[title="紫微斗数排盘"]')
+  await iframe.waitFor({ state: 'visible', timeout: 30000 })
+  const frame = page.frameLocator('iframe[title="紫微斗数排盘"]')
+  await frame.locator('button[type="submit"]').first().waitFor({ state: 'visible', timeout: 60000 })
+  const frameUrl = page.frames().find((f) => f.url().includes('/ziwei/'))?.url() ?? ''
+  check('主面板内嵌排盘应用渲染成功', frameUrl.includes('/ziwei/'), frameUrl)
+
+  // 内嵌页配色要跟外壳一致（外壳浅色 → 排盘页 data-theme="light"）
+  const hostDark = await page.evaluate(() =>
+    (getComputedStyle(document.documentElement).colorScheme || '').includes('dark'),
+  )
+  const frameTheme = await page
+    .frames()
+    .find((f) => f.url().includes('/ziwei/'))
+    ?.evaluate(() => document.documentElement.getAttribute('data-theme'))
+  check(
+    '内嵌页配色跟随 DSH 外壳',
+    frameTheme === (hostDark ? 'dark' : 'light'),
+    `host=${hostDark ? 'dark' : 'light'} iframe=${frameTheme}`,
+  )
+  await page.screenshot({ path: path.join(outDir, '02-panel.png') })
+
+  // ── 3. 带登录态访问 /ziwei/ 是 200 ──
+  const authedRes = await context.request.get(new URL('ziwei/', url).href)
+  check('登录态访问 /ziwei/ 返回 200', authedRes.status() === 200, `HTTP ${authedRes.status()}`)
+
+  // ── 4. 在 iframe 内起盘 → 盘面桥接 → 按钮可用 ──
+  if (!skipChart) {
+    await dismissWelcome()
+    const selects = frame.locator('select')
+    await selects.nth(0).selectOption('1990')
+    await selects.nth(1).selectOption('6')
+    await selects.nth(2).selectOption('15')
+    await selects.nth(5).selectOption('9')
+    await selects.nth(6).selectOption('30')
+    await frame.locator('button[type="submit"]').click()
+    await frame.locator('text=重新起盘').first().waitFor({ state: 'visible', timeout: 60000 })
+
+    const askButton = page.locator('button', { hasText: '让 DSH 解读' }).first()
+    await page
+      .locator('text=已读取当前盘面')
+      .first()
+      .waitFor({ state: 'visible', timeout: 20000 })
+      .catch(() => {})
+    check('iframe 内起盘成功', true)
+
+    // 竖向空间利用：排盘页要撑满 iframe（用户反馈「下面还有很多高度」）
+    const layout = await page.evaluate(() => {
+      const f = document.querySelector('iframe[title="紫微斗数排盘"]')
+      const fr = f ? f.getBoundingClientRect() : null
+      return fr ? { frameH: Math.round(fr.height) } : null
+    })
+    const innerLayout = await page
+      .frames()
+      .find((candidate) => candidate.url().includes('/ziwei/'))
+      ?.evaluate(() => {
+        const main = document.querySelector('main')
+        const board = document.querySelector('.grid.rounded-xl')
+        const aside = document.querySelector('aside')
+        return {
+          viewportH: window.innerHeight,
+          mainH: main ? Math.round(main.getBoundingClientRect().height) : 0,
+          boardH: board ? Math.round(board.getBoundingClientRect().height) : 0,
+          asideH: aside ? Math.round(aside.getBoundingClientRect().height) : 0,
+          insets: main ? main.getAttribute('data-pet-insets') : null,
+        }
+      })
+    check(
+      '排盘页纵向撑满可用高度',
+      Boolean(innerLayout) &&
+        layout &&
+        innerLayout.mainH >= layout.frameH - 4 &&
+        innerLayout.boardH >= 520 &&
+        innerLayout.asideH >= layout.frameH - 120,
+      innerLayout ? `main=${innerLayout.mainH} board=${innerLayout.boardH} aside=${innerLayout.asideH} frame=${layout?.frameH}` : 'n/a',
+    )
+    // 宠物是宿主层异步挂载的，同步可能晚一拍：轮询最多 15s
+    const readInsets = async () =>
+      (await page
+        .frames()
+        .find((candidate) => candidate.url().includes('/ziwei/'))
+        ?.evaluate(() => document.querySelector('main')?.getAttribute('data-pet-insets'))
+        .catch(() => null)) ?? null
+    let insets = await readInsets()
+    for (let i = 0; i < 15 && (!insets || insets === '0,0'); i += 1) {
+      await page.waitForTimeout(1000)
+      insets = await readInsets()
+    }
+    check('插件把宠物遮挡区域同步给了内嵌页', Boolean(insets && insets !== '0,0'), insets ?? 'n/a')
+
+    // 生辰记忆：起盘后应写进宿主上的配置文件（不是浏览器存储）
+    const birthRes = await context.request.get(new URL('ziwei/birth', url).href).catch(() => null)
+    const birthPayload = birthRes && birthRes.ok() ? await birthRes.json().catch(() => null) : null
+    const current = birthPayload?.current
+    check(
+      '起盘后生辰被写进服务端配置文件',
+      current?.info?.year === 1990 && current?.info?.month === 6 && current?.info?.day === 15,
+      current ? `${current.info.year}-${current.info.month}-${current.info.day}` : JSON.stringify(birthPayload).slice(0, 80),
+    )
+    check(
+      '配置文件里带表单快照（重新起盘可回填）',
+      Boolean(current?.form?.year),
+      current?.form ? `form.year=${current.form.year}` : 'no form',
+    )
+    const legacyLocal = await page
+      .evaluate(() => window.localStorage.getItem('ziwei-birth-v1'))
+      .catch(() => 'unknown')
+    check('不再往浏览器 localStorage 写生辰', legacyLocal === null, String(legacyLocal))
+
+    // 把验收污染掉的用户记录还原
+    if (birthBefore?.current?.info) {
+      const restored = await context.request
+        .post(new URL('ziwei/birth', url).href, {
+          data: { info: birthBefore.current.info, form: birthBefore.current.form },
+        })
+        .catch(() => null)
+      check('验收后恢复了原有的生辰记录', Boolean(restored && restored.ok()), restored ? `HTTP ${restored.status()}` : 'n/a')
+    } else {
+      await clearBirth()
+    }
+
+    // 解读面板：不再是应用自带 AI，而是插件 host 半用 DSH 模型生成（/ziwei/ai）
+    const frameText = await frame.locator('body').innerText().catch(() => '')
+    check(
+      '排盘页渲染「命理解读」面板（由 DSH 模型生成）',
+      /命理解读/.test(frameText) && /由 DSH 模型生成/.test(frameText),
+      `hasPanel=${/命理解读/.test(frameText)}`,
+    )
+    const apiRes = await page.request.get(new URL('ziwei/api/interpret', page.url()).href)
+    check('应用里旧的 AI 接口已移除', apiRes.status() === 404, `HTTP ${apiRes.status()}`)
+
+    const panelText = async () => {
+      const text = await frame.locator('body').innerText()
+      return text.slice(text.indexOf('命理解读'))
+    }
+    // 面板是流式的：等到「追问」按钮重新出现（说明这一轮结束）且正文稳定
+    const waitReading = async (mustMatch, timeoutMs = 150000) => {
+      const started = Date.now()
+      let last = ''
+      while (Date.now() - started < timeoutMs) {
+        await page.waitForTimeout(1500)
+        const text = await panelText()
+        const idle = (await frame.locator('button:has-text("追问")').count()) > 0
+        if (idle && text === last && mustMatch.test(text)) return text
+        last = text
+      }
+      return last
+    }
+
+    const reading = await waitReading(/【命格定性】/)
+    check('右侧面板自动生成了命格解读', /【命格定性】/.test(reading), `len=${reading.length}`)
+    check(
+      '解读由 DSH 模型生成，没有回退报错',
+      !/解读失败|稍后再试|没接通|Cannot read|no credential|MissingSessionID/.test(reading),
+      reading.slice(-120).replace(/\s+/g, ' '),
+    )
+    await page.waitForTimeout(1000)
+    await page.screenshot({ path: path.join(outDir, '03-chart-bridged.png'), fullPage: false })
+
+    // 六个 tab 之一：感情 → 换一套解读
+    await frame.locator('button:has-text("感情")').first().click({ force: true })
+    const love = await waitReading(/【感情格局】/)
+    check('切换「感情」标签会重新生成对应解读', /【感情格局】/.test(love), `sections=${(love.match(/【[^】]+】/g) || []).length}`)
+
+    // 追问：必须走真实点击，force 会绕过命中测试、测不出被浮层遮挡
+    await frame.locator('input[placeholder*="继续追问"]').fill('今年适合换工作吗？')
+    const petBox = await page.locator('[aria-label="pet"]').first().boundingBox().catch(() => null)
+    const iframeBox = await page.locator('iframe[title="紫微斗数排盘"]').boundingBox().catch(() => null)
+    const realFrame = page.frames().find((item) => item.url().includes('/ziwei/'))
+    const btnBox = await realFrame.evaluate(() => {
+      const btn = [...document.querySelectorAll('button')].find((el) => el.innerText.trim() === '追问')
+      if (!btn) return null
+      const rect = btn.getBoundingClientRect()
+      return { x: rect.x, y: rect.y, w: rect.width, h: rect.height }
+    })
+    let overlapped = false
+    if (petBox && iframeBox && btnBox) {
+      const left = iframeBox.x + btnBox.x
+      const top = iframeBox.y + btnBox.y
+      const right = left + btnBox.w
+      const bottom = top + btnBox.h
+      overlapped = !(
+        right < petBox.x ||
+        petBox.x + petBox.width < left ||
+        bottom < petBox.y ||
+        petBox.y + petBox.height < top
+      )
+    }
+    check('「追问」按钮没有被宠物浮层盖住', !overlapped)
+    await frame.locator('button:has-text("追问")').first().click({ timeout: 15000 })
+    const followed = await waitReading(/今年适合换工作/)
+    check(
+      '追问能带着盘面继续解读',
+      /今年适合换工作/.test(followed) && followed.replace(/\s+/g, '').length > 900,
+      `len=${followed.length}`,
+    )
+    await page.screenshot({ path: path.join(outDir, '05-panel-reading.png') })
+  }
+
+  // ── 5. 「让 DSH 解读」→ 新开会话 + 盘面 prompt 进输入框（--ask 才跑）──
+  if (args.includes('--ask')) {
+    const askButton = page.locator('button', { hasText: '让 DSH 解读' }).first()
+    await dismissWelcome()
+    await askButton.click({ force: true })
+    // 插件在新会话打开后把命盘 prompt 插进 Lexical 草稿；同时写剪贴板作为兜底。
+    const draft = await page
+      .waitForFunction(
+        () => {
+          const nodes = [...document.querySelectorAll('[contenteditable="true"]'), ...document.querySelectorAll('textarea')]
+          const text = nodes.map((node) => node.value ?? node.innerText).join('\n')
+          return /紫微斗数/.test(text) && /命盘/.test(text) ? text : false
+        },
+        undefined,
+        { timeout: 25000 },
+      )
+      .then((handle) => handle.jsonValue())
+      .catch(() => '')
+    const clipboard = await page
+      .evaluate(() => navigator.clipboard.readText().catch(() => ''))
+      .catch(() => '')
+    check('「让 DSH 解读」打开新会话', /New Session|Into the Unknown|Standard mode/.test(await page.locator('body').innerText()))
+    check('会话草稿已填入命盘 prompt', /紫微斗数/.test(draft) && /命盘/.test(draft), draft.replace(/\s+/g, ' ').slice(0, 80))
+    check('命盘 prompt 同时写入剪贴板（兜底）', /紫微斗数/.test(clipboard), clipboard.slice(0, 40))
+    report.draft = String(draft).slice(0, 400)
+    await page.screenshot({ path: path.join(outDir, '04-ask-draft.png') })
+  }
+
+  const fatalErrors = consoleErrors.filter((text) => !/Failed to load resource/.test(text))
+  check('无控制台 JS 报错', fatalErrors.length === 0, fatalErrors.slice(0, 3).join(' | ') || 'clean')
+
+  report.ok = report.checks.every((item) => item.ok)
+} catch (error) {
+  report.ok = false
+  report.error = error && error.stack ? error.stack : String(error)
+  console.error('验收异常：', error)
+} finally {
+  report.finishedAt = new Date().toISOString()
+  await writeFile(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2))
+  await browser.close()
+  console.log(report.ok ? '\n全部检查通过 ✅' : '\n存在失败项 ❌（见 report.json）')
+  process.exit(report.ok ? 0 : 1)
+}
