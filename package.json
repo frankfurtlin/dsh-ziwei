@@ -37,6 +37,9 @@
   ],
   "scripts": {
     "check": "node --check lib/index.js && node --check client.js",
-    "verify": "node verify.mjs"
+    "verify": "node verify.mjs",
+    "self-check": "bash scripts/check.sh",
+    "self-check:static": "bash scripts/check.sh --static",
+    "hooks": "bash scripts/install-hooks.sh"
   }
 }

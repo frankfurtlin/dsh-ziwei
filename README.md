@@ -11,6 +11,18 @@
 - 插件目录：`/root/workspace/plugins/dsh-ziwei`，注册在 `/root/.dsh/profiles/web/package.json`
 - 应用目录：本仓库 `app/`，由 `dsh-ziwei-app.service` 跑在 `127.0.0.1:8815`
 
+## 改完代码先自检
+
+```bash
+scripts/check.sh            # 全套：静态 + 构建 + 隔离实例端到端（约 2–3 分钟）
+scripts/check.sh --static   # 只静态：语法 / 类型 / 内核回归（约 40 秒）
+scripts/install-hooks.sh    # 装 pre-commit，静态不过就提交不了
+```
+
+它会在 `/tmp/dsh-ziwei-check` 起一个独立 DSH 实例（独立端口与会话，不碰生产），
+用真实浏览器把面板、排盘、解读、合盘、古籍、百科、分享、最近生辰全部走一遍，
+结果写 `verification/check/`。细节见 [docs/testing.md](docs/testing.md)。
+
 ## 文档
 
 | 文档 | 内容 |
@@ -19,6 +31,7 @@
 | [docs/architecture.md](docs/architecture.md) | 两层结构、请求链路与鉴权、三个入口分工、数据落盘、面板座位与 `postMessage` 协议 |
 | [docs/api.md](docs/api.md) | `/ziwei/ai`（SSE 协议、限制、错误码）与 `/ziwei/birth`（配置读写）的完整接口 |
 | [docs/app-map.md](docs/app-map.md) | 应用能力地图：路由、排盘页五段结构、布局约束、组件与内核模块清单、主题 token、回归测试 |
+| [docs/testing.md](docs/testing.md) | **自检与验收**：`scripts/check.sh` 一键跑静态 + 构建 + 隔离实例端到端，47+16 项分别验什么、常见坑 |
 | [docs/deploy.md](docs/deploy.md) | 服务单元、注册方式、改什么重启什么、构建、验收命令、测试实例、回滚、故障排查 |
 | [docs/changelog.md](docs/changelog.md) | 从独立站点到插件的演进与踩过的坑 |
 
@@ -32,7 +45,10 @@
 | `lib/ai.js` | host 半：解读接口，用 `ctx.llm.stream()` 调宿主模型，SSE 流式回吐 |
 | `lib/birth-store.js` | host 半：生辰的服务端存储，读写 `$DSH_HOME/ziwei/birth.json`（0600） |
 | `client.js` | client 半：注册侧栏行（panellist 座位）+ 主面板（main 座位，keyed=`ziwei`）；面板顶部分段控件切换排盘/合盘/古籍/百科四个视图，内嵌同源 iframe |
-| `verify.mjs` | 真实浏览器验收（playwright），默认打测试实例，可指定生产地址 |
+| `verify.mjs` | 真实浏览器验收（playwright，47 项），默认打测试实例，可指定生产地址 |
+| `app/test-persistence.mjs` | 生辰服务端存储与恢复的验收（playwright，16 项） |
+| `scripts/check.sh` | **改完代码跑这个**：静态检查 + 构建重启 + 隔离实例上跑上面两个脚本 |
+| `scripts/install-hooks.sh` | 装 pre-commit（只跑静态检查，约 40 秒） |
 | `restart-and-verify.sh` | 生产重启 + 自动验收，脱离当前会话执行（见下） |
 
 ### 解读只走 DSH

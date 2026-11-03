@@ -8,6 +8,7 @@
 | [architecture.md](./architecture.md) | 整体是怎么搭起来的：两层结构、请求链路、鉴权在哪、数据存在哪 |
 | [api.md](./api.md) | host 半提供的三个入口（反代 / AI / 生辰）的协议、事件格式、错误码，含 curl 示例 |
 | [app-map.md](./app-map.md) | 排盘应用里都有什么：路由表、组件职责、`lib/ziwei` 每个模块干什么、哪些删了、怎么跑回归测试 |
+| [testing.md](./testing.md) | 自检与验收：`scripts/check.sh` 做了什么、47+16 项分别验什么、常见坑。**改完代码先跑它。** |
 | [deploy.md](./deploy.md) | 服务单元、端口、构建与重启、改什么要重启什么、验收命令、回滚、故障排查 |
 | [changelog.md](./changelog.md) | 从独立站点到插件版的完整演进记录，以及每一轮踩过的坑 |
 
