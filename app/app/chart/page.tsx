@@ -10,7 +10,14 @@ import StarDetailPanel from '@/components/StarDetailPanel';
 import { generateChart } from '@/lib/ziwei/algorithm';
 import { digestChart } from '@/lib/ziwei/digest';
 import { detectPatterns, getMingGongSummary } from '@/lib/ziwei/patterns';
-import { clearSavedBirth, isRealDate, listRecentBirths, loadSavedBirth, saveBirth } from '@/lib/birth-storage';
+import {
+  clearAllBirths,
+  clearSavedBirth,
+  isRealDate,
+  listRecentBirths,
+  loadSavedBirth,
+  saveBirth,
+} from '@/lib/birth-storage';
 import { formToBirthInfo } from '@/lib/ziwei/share';
 import type { StoredBirth } from '@/lib/birth-storage';
 import type { BirthInfo, ZiweiChart, Palace, Star } from '@/lib/ziwei/types';
@@ -60,12 +67,25 @@ function readSharedBirth(): BirthInfo | null {
 
 const HOUR_LABELS = ['子时', '丑时', '寅时', '卯时', '辰时', '巳时', '午时', '未时', '申时', '酉时', '戌时', '亥时'];
 
-/** 一行一个生辰：「1990-06-15 · 巳时 · 男 · 张三」 */
-function birthLabel(info: BirthInfo): string {
+/**
+ * 一行一个生辰：「1990-06-15 23:30 · 子时 · 男 · 上海 · 张三」。
+ *
+ * 有表单快照时优先用它拼「几点几分 + 出生地」：同一天同一个人早晚子时会被
+ * 换算成次日，只看 `info` 会看到日期跳了一天、也不知道是哪个城市校正出来的盘，
+ * 列表里几条看起来一模一样，用户没法分辨。
+ */
+function birthLabel(record: StoredBirth): string {
+  const { info } = record;
+  const form = (record.form ?? {}) as Partial<BirthFormState>;
   const date = `${info.year}-${String(info.month).padStart(2, '0')}-${String(info.day).padStart(2, '0')}`;
+  const clock =
+    form.clockHour !== undefined && form.clockHour !== ''
+      ? ` ${String(form.clockHour).padStart(2, '0')}:${String(form.clockMinute ?? '0').padStart(2, '0')}`
+      : '';
   const hour = HOUR_LABELS[info.hour] ?? `${info.hour} 时辰`;
   const gender = info.gender === 'female' ? '女' : '男';
-  return `${date} · ${hour} · ${gender}${info.name ? ` · ${info.name}` : ''}`;
+  const city = form.city ? ` · ${form.city}` : '';
+  return `${date}${clock} · ${hour} · ${gender}${city}${info.name ? ` · ${info.name}` : ''}`;
 }
 
 export default function ChartPage() {
@@ -179,11 +199,21 @@ export default function ChartPage() {
     });
   };
 
+  /** 忘记这个生辰：只清「下次打开自动恢复」，最近记录保留（以前会把历史一起删掉）。 */
   const handleForget = () => {
     setSaved(null);
     setRestored(false);
+    void clearSavedBirth().then(refreshRecent);
+  };
+
+  /** 清空全部生辰记录（连历史一起删，需要用户再确认一次）。 */
+  const handleClearAll = () => {
+    if (!window.confirm('清空全部生辰记录？包括「最近生辰」里的历史，删除后无法恢复。')) return;
+    setSaved(null);
+    setRestored(false);
     setRecent([]);
-    void clearSavedBirth();
+    setRecentOpen(false);
+    void clearAllBirths();
   };
 
   /** 用一条已有生辰直接起盘（最近列表点选时用） */
@@ -301,7 +331,7 @@ export default function ChartPage() {
                   color: 'var(--t-text1)',
                 }}
               >
-                {birthLabel(item.info)}
+                {birthLabel(item)}
               </button>
             ))}
           </div>
@@ -318,6 +348,7 @@ export default function ChartPage() {
             表单已回填上次输入的生辰。生辰只存在本机配置文件中，{' '}
             <button
               type="button"
+              data-ziwei-forget-form
               onClick={handleForget}
               style={{
                 border: 'none', background: 'none', padding: 0, cursor: 'pointer',
@@ -409,9 +440,29 @@ export default function ChartPage() {
                       color: 'var(--t-text1)', font: 'inherit', fontSize: 13,
                     }}
                   >
-                    {birthLabel(item.info)}
+                    {birthLabel(item)}
                   </button>
                 ))}
+                <div
+                  style={{
+                    marginTop: 6,
+                    paddingTop: 6,
+                    borderTop: '1px solid var(--t-border)',
+                  }}
+                >
+                  <button
+                    type="button"
+                    data-ziwei-clear-all
+                    onClick={handleClearAll}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px',
+                      border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 8,
+                      color: 'var(--t-faint)', font: 'inherit', fontSize: 12,
+                    }}
+                  >
+                    清空全部记录…
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -426,6 +477,7 @@ export default function ChartPage() {
             {saved.savedAt ? `（${saved.savedAt.slice(0, 10)} 保存）` : ''}·{' '}
             <button
               type="button"
+              data-ziwei-forget
               onClick={handleForget}
               style={{
                 border: 'none', background: 'none', padding: 0, cursor: 'pointer',

@@ -158,8 +158,19 @@ gender 不是 `male|female`）→ 400。
 
 ### `DELETE`
 
-清空 `current` 与 `history`，返回 `{ ok: true, current: null, history: [] }`。
-界面上对应「忘记这个生辰」/「忘记」按钮。
+两种作用范围，靠查询参数区分：
+
+| 请求 | 作用 | 响应 |
+| --- | --- | --- |
+| `DELETE /ziwei/birth` | 只清 `current`（下次打开不再自动恢复），**`history` 保留** | `{ ok: true, scope: "current", current: null, history: [...] }` |
+| `DELETE /ziwei/birth?scope=all` | `current` 与 `history` 一起清空 | `{ ok: true, scope: "all", current: null, history: [] }` |
+
+界面对应：「忘记这个生辰」/「忘记」= 默认那一种（保留最近列表），「清空全部记录…」=
+`scope=all`（清空前会二次确认）。
+
+> 早期版本默认就把 `history` 一起删了，用户点一次「忘记」等于抹掉全部记录，
+> 验收脚本回写时也只用 `current`，把「最近生辰」的历史冲掉过。默认值改保守了以后，
+> 删除全部必须显式写 `?scope=all`。
 
 | 状态 | 场景 |
 | --- | --- |

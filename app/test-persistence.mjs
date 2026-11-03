@@ -57,8 +57,8 @@ try {
     .then((res) => (res.ok() ? res.json() : null))
     .catch(() => null)
 
-  // 干净起点：清服务端 + 清早期 localStorage
-  const cleared = await context.request.delete(birthEndpoint).catch(() => null);
+  // 干净起点：清服务端（含历史，用 scope=all）+ 清早期 localStorage
+  const cleared = await context.request.delete(`${birthEndpoint}?scope=all`).catch(() => null);
   check('清空服务端生辰记录', Boolean(cleared && cleared.ok()), `HTTP ${cleared ? cleared.status() : 0}`);
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.evaluate((k) => window.localStorage.removeItem(k), legacyKey);
@@ -135,19 +135,39 @@ try {
   await page.waitForTimeout(800);
   const afterForget = await readServer();
   check(
-    '点「忘记这个生辰」后服务端配置被清空',
-    afterForget.payload?.current == null,
-    JSON.stringify(afterForget.payload?.current ?? null),
+    '点「忘记这个生辰」后当前记录被清空、历史仍保留',
+    afterForget.payload?.current == null &&
+      Array.isArray(afterForget.payload?.history) &&
+      afterForget.payload.history.length >= 1,
+    `current=${JSON.stringify(afterForget.payload?.current ?? null)} history=${afterForget.payload?.history?.length ?? 'n/a'}`,
   );
   await page.screenshot({ path: `${shotDir}/03-forgotten.png` });
 
-  // 还原用户原有记录（验收写的是 1990-6-15，不能留在生产配置里）
+  // 完整还原用户原有记录（current + 历史列表）：先清空，再按旧→新回放历史，最后写回 current。
+  // 只回写 current 会把「最近生辰」里的历史冲掉（曾经真的丢过）。
+  await context.request.delete(`${birthEndpoint}?scope=all`).catch(() => null);
+  const replay = Array.isArray(before?.history) ? [...before.history].reverse() : [];
+  let restoreOk = true;
+  for (const record of replay) {
+    const res = await context.request
+      .post(birthEndpoint, { data: { info: record.info, form: record.form } })
+      .catch(() => null);
+    if (!res || !res.ok()) restoreOk = false;
+  }
   if (before?.current?.info) {
     const restored = await context.request
       .post(birthEndpoint, { data: { info: before.current.info, form: before.current.form } })
       .catch(() => null);
-    check('验收后恢复了原有的生辰记录', Boolean(restored && restored.ok()), restored ? `HTTP ${restored.status()}` : 'n/a');
+    if (!restored || !restored.ok()) restoreOk = false;
   }
+  const afterRestore = await readServer();
+  check(
+    '验收后完整恢复了原有的生辰记录（含最近列表）',
+    restoreOk &&
+      (afterRestore.payload?.history?.length ?? 0) >= (before?.history?.length ?? 0) &&
+      (afterRestore.payload?.current?.info?.year ?? null) === (before?.current?.info?.year ?? null),
+    `history=${afterRestore.payload?.history?.length ?? 'n/a'} current=${afterRestore.payload?.current?.info?.year ?? null}`,
+  );
 
   check('无页面 JS 报错', errors.length === 0, errors.join(' | ') || 'clean');
 } finally {

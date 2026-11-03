@@ -74,11 +74,45 @@ try {
     .get(new URL('ziwei/birth', url).href)
     .then((res) => (res.ok() ? res.json() : null))
     .catch(() => null)
-  const clearBirth = async () => {
-    const res = await context.request.delete(new URL('ziwei/birth', url).href).catch(() => null)
+  const birthUrl = new URL('ziwei/birth', url).href
+  const clearBirth = async (scope) => {
+    const target = scope === 'all' ? `${birthUrl}?scope=all` : birthUrl
+    const res = await context.request.delete(target).catch(() => null)
     return res ? res.status() : 0
   }
-  const birthStatus = await clearBirth()
+  const readBirth = async () => {
+    const res = await context.request.get(birthUrl).catch(() => null)
+    return res && res.ok() ? res.json().catch(() => null) : null
+  }
+  const postBirth = async (info, form) => {
+    const res = await context.request.post(birthUrl, { data: { info, form } }).catch(() => null)
+    return res ? res.status() : 0
+  }
+  // 完整还原：先把库清空，再按「旧→新」回放历史，最后写回 current。
+  // 以前只写回 current，用户的「最近生辰」历史被验收悄悄抹掉过。
+  const restoreBirths = async (snapshot) => {
+    await clearBirth('all')
+    const history = Array.isArray(snapshot?.history) ? [...snapshot.history].reverse() : []
+    for (const record of history) await postBirth(record.info, record.form)
+    if (snapshot?.current?.info) await postBirth(snapshot.current.info, snapshot.current.form)
+    return history.length
+  }
+
+  // DELETE 语义：默认只清「当前记录」，历史保留；?scope=all 才真清空。
+  await clearBirth('all')
+  await postBirth({ year: 1955, month: 5, day: 5, hour: 3, gender: 'male' })
+  await postBirth({ year: 1956, month: 6, day: 6, hour: 4, gender: 'female' })
+  const forgetStatus = await clearBirth()
+  const afterForget = await readBirth()
+  check(
+    '「忘记」只清当前记录、保留历史列表',
+    forgetStatus === 200 &&
+      afterForget?.current === null &&
+      Array.isArray(afterForget?.history) &&
+      afterForget.history.length >= 2,
+    `HTTP ${forgetStatus} current=${JSON.stringify(afterForget?.current ?? null)} history=${afterForget?.history?.length ?? 'n/a'}`,
+  )
+  const birthStatus = await clearBirth('all')
   check('清空服务端生辰记录（可重复执行）', birthStatus === 200, `HTTP ${birthStatus}`)
 
   // ── 1. 侧栏入口存在且位置正确 ──
@@ -239,17 +273,18 @@ try {
       .catch(() => 'unknown')
     check('不再往浏览器 localStorage 写生辰', legacyLocal === null, String(legacyLocal))
 
-    // 把验收污染掉的用户记录还原
-    if (birthBefore?.current?.info) {
-      const restored = await context.request
-        .post(new URL('ziwei/birth', url).href, {
-          data: { info: birthBefore.current.info, form: birthBefore.current.form },
-        })
-        .catch(() => null)
-      check('验收后恢复了原有的生辰记录', Boolean(restored && restored.ok()), restored ? `HTTP ${restored.status()}` : 'n/a')
-    } else {
-      await clearBirth()
-    }
+    // 把验收污染掉的用户记录完整还原（current + 历史列表）
+    const restoredCount = await restoreBirths(birthBefore)
+    const afterRestore = await readBirth()
+    const expectedCurrent = birthBefore?.current?.info?.year ?? null
+    const actualCurrent = afterRestore?.current?.info?.year ?? null
+    check(
+      '验收后完整恢复了原有的生辰记录（含最近列表）',
+      restoredCount >= (birthBefore?.history?.length ?? 0) &&
+        actualCurrent === expectedCurrent &&
+        (afterRestore?.history?.length ?? 0) >= (birthBefore?.history?.length ?? 0),
+      `restored=${restoredCount} history=${afterRestore?.history?.length ?? 'n/a'} current=${actualCurrent}`,
+    )
 
     // 解读面板：不再是应用自带 AI，而是插件 host 半用 DSH 模型生成（/ziwei/ai）
     const frameText = await frame.locator('body').innerText().catch(() => '')

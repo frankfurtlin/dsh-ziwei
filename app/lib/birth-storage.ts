@@ -142,11 +142,25 @@ export async function saveBirth(
   }
 }
 
-/** 忘记：把配置文件里的当前记录与历史一起清掉。 */
+/** 忘记这个生辰：只清 current（下次打开不再自动恢复），历史记录保留。 */
 export async function clearSavedBirth(): Promise<boolean> {
   dropLegacyLocalRecord();
   try {
     const response = await fetch(ENDPOINT, { method: 'DELETE', credentials: 'same-origin' });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** 清空全部记录（current + 历史），用户显式选择时才调用。 */
+export async function clearAllBirths(): Promise<boolean> {
+  dropLegacyLocalRecord();
+  try {
+    const response = await fetch(`${ENDPOINT}?scope=all`, {
+      method: 'DELETE',
+      credentials: 'same-origin',
+    });
     return response.ok;
   } catch {
     return false;
