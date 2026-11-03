@@ -447,8 +447,38 @@ try {
       }
       return currentFrameUrl()
     }
-    check('面板里不再有「合盘」（该页依赖应用内 AI，已随 AI 面板移除）',
-      (await page.locator('button[data-dsh-ziwei-tab="heming"]').count()) === 0)
+    const hemingUrl = await switchPanelView('heming', '/ziwei/heming')
+    check('面板能切到「合盘」', hemingUrl.includes('/ziwei/heming'), hemingUrl)
+    // 合盘页：填双方生辰 → 点「开始合盘分析」→ 应由 DSH 模型流式出解读
+    const hemingFrame = page.frames().find((item) => item.url().includes('/ziwei/heming'))
+    if (hemingFrame) {
+      const selects = hemingFrame.locator('select')
+      const pairs = [[0, '1990'], [1, '6'], [2, '15'], [5, '9'], [6, '30'], [7, '1992'], [8, '3'], [9, '8'], [12, '5'], [13, '0']]
+      for (const [index, value] of pairs) await selects.nth(index).selectOption(value)
+      await hemingFrame.locator('button', { hasText: '开始合盘分析' }).first().click()
+      const box = hemingFrame.locator('[data-heming-analysis]')
+      const deadline = Date.now() + 150000
+      let hemingText = ''
+      let stableFor = 0
+      let lastLen = -1
+      while (Date.now() < deadline) {
+        hemingText = await box.innerText().catch(() => '')
+        // 流式结束的判据：追问框出现（分析完成后才渲染），或连续 3 次长度不变
+        const done = /针对此次合盘继续追问/.test(await hemingFrame.locator('body').innerText().catch(() => ''))
+        stableFor = hemingText.length === lastLen ? stableFor + 1 : 0
+        lastLen = hemingText.length
+        if (hemingText.length > 900 && (done || stableFor >= 3)) break
+        await page.waitForTimeout(2000)
+      }
+      check(
+        '合盘分析由 DSH 模型生成',
+        hemingText.length > 900 && hemingText.includes('甲方') && !/分析暂时不可用/.test(hemingText),
+        `len=${hemingText.length}`,
+      )
+      await page.screenshot({ path: path.join(outDir, '10-panel-heming.png') })
+    } else {
+      check('合盘分析由 DSH 模型生成', false, '没有找到合盘 iframe')
+    }
     const libraryUrl = await switchPanelView('library', '/ziwei/library')
     check('面板能切到「古籍」', libraryUrl.includes('/ziwei/library'), libraryUrl)
     const knowledgeUrl = await switchPanelView('knowledge', '/ziwei/knowledge')

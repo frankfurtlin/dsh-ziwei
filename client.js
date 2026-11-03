@@ -34,12 +34,13 @@ window.__ModuleLoader__.load({
       "请先做整体解读：命格与命宫主星格局、三方四正、生年四化落宫、当前大限与今年的重点，最后给 3 条可执行的建议。";
 
     /**
-     * 面板里可切换的三张页面（同一个应用，不同路由）。
-     * 合盘页只有「调 AI 接口」这一条路，而应用内的 AI 已经去掉（解读统一由 DSH 的模型做），
-     * 所以这里只保留能在本地独立成立的三个视图。
+     * 面板里可切换的四张页面（同一个应用，不同路由）。
+     * 合盘页的解读同样走宿主的 /ziwei/ai（服务端把两张盘拼成 prompt），
+     * 不依赖任何应用内置的 AI 接口。
      */
     var VIEWS = [
       { key: "chart", label: "排盘", path: "ziwei/chart", title: "紫微斗数排盘" },
+      { key: "heming", label: "合盘", path: "ziwei/heming", title: "紫微斗数合盘" },
       { key: "library", label: "古籍", path: "ziwei/library", title: "紫微斗数古籍库" },
       { key: "knowledge", label: "百科", path: "ziwei/knowledge", title: "紫微斗数百科" },
     ];
@@ -139,7 +140,7 @@ window.__ModuleLoader__.load({
       var [sent, setSent] = react.useState(false);
       var [copied, setCopied] = react.useState(false);
 
-      // 当前在看哪一页：排盘 / 古籍 / 百科。默认落排盘页。
+      // 当前在看哪一页：排盘 / 合盘 / 古籍 / 百科。默认落排盘页。
       var [view, setView] = react.useState("chart");
 
       function viewUrl(key) {
@@ -385,7 +386,7 @@ window.__ModuleLoader__.load({
             },
           },
           h("span", { style: { fontSize: 14, fontWeight: 600 } }, "紫微斗数"),
-          // 二级入口：排盘 / 古籍 / 百科（同一个应用的不同路由）
+          // 二级入口：排盘 / 合盘 / 古籍 / 百科（同一个应用的不同路由）
           h(
             "div",
             {
