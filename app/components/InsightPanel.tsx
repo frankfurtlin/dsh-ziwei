@@ -152,6 +152,15 @@ export default function InsightPanel({
       : `ziwei-${Math.random().toString(36).slice(2)}`,
   );
   const scrollRef = useRef<HTMLDivElement>(null);
+  /**
+   * 平滑吐词。
+   *
+   * 上游是 SSE 增量，但真实到达节奏很毛躁：实测 1–24 字的块混杂，偶尔还会
+   * 卡 0.4 秒。直接把 delta 往 React 里塞，用户看到的就是「一顿一顿」。
+   * 这里把增量扔进缓冲，用固定 30fps 的定时器匀速放出，放的速度跟积压量
+   * 挂钩（积压多就快一点），于是无论网络怎么抖，屏幕上的字都是连续出现的。
+   */
+  const smoothRef = useRef({ buffer: '', shown: '', finished: false, timer: 0 as number });
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -163,7 +172,13 @@ export default function InsightPanel({
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
   // 页面卸载（切走 iframe / 关面板）时取消在途请求，别让模型白跑
-  useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+      if (smoothRef.current.timer) window.clearInterval(smoothRef.current.timer);
+    },
+    [],
+  );
 
   const run = useCallback(
     async (question: string, nextTopic: TopicKey) => {
@@ -176,6 +191,12 @@ export default function InsightPanel({
       const history = messagesRef.current;
       const userBubble = question || `请解读：${TOPICS.find((item) => item.key === nextTopic)?.label ?? ''}`;
       setMessages([...history, { role: 'user', content: userBubble }, { role: 'assistant', content: '' }]);
+
+      if (smoothRef.current.timer) {
+        window.clearInterval(smoothRef.current.timer);
+        smoothRef.current.timer = 0;
+      }
+      smoothRef.current = { buffer: '', shown: '', finished: false, timer: 0 };
 
       const controller = new AbortController();
       abortRef.current = controller;
@@ -190,19 +211,40 @@ export default function InsightPanel({
             thread: threadRef.current,
           },
           (delta) => {
-            setMessages((prev) => {
-              const next = [...prev];
-              const last = next[next.length - 1];
-              if (last && last.role === 'assistant') {
-                next[next.length - 1] = { role: 'assistant', content: last.content + delta };
+            const smooth = smoothRef.current;
+            smooth.buffer += delta;
+            smooth.finished = false;
+            if (smooth.timer) return;
+            smooth.timer = window.setInterval(() => {
+              const state = smoothRef.current;
+              const remaining = state.buffer.length - state.shown.length;
+              if (remaining > 0) {
+                // 积压越多放得越快：既不让画面落后太多，也不会一口气糊上去
+                const step = Math.min(24, Math.max(1, Math.ceil(remaining / 12)));
+                state.shown = state.buffer.slice(0, state.shown.length + step);
+                const content = state.shown;
+                setMessages((prev) => {
+                  const next = [...prev];
+                  const last = next[next.length - 1];
+                  if (last && last.role === 'assistant') {
+                    next[next.length - 1] = { role: 'assistant', content };
+                  }
+                  return next;
+                });
               }
-              return next;
-            });
+              if (state.finished && state.shown.length >= state.buffer.length) {
+                window.clearInterval(state.timer);
+                state.timer = 0;
+              }
+            }, 33);
           },
           controller.signal,
           setReasoningChars,
         );
+        // 流读完了：把缓冲里剩下的字尽快放完（finished 后 step 会自然收敛）
+        smoothRef.current.finished = true;
       } catch (caught) {
+        smoothRef.current.finished = true;
         const message = String((caught as Error)?.message || caught);
         const friendly = /Failed to fetch|NetworkError|50\d/.test(message)
           ? '解读服务没接通：这里是 DSH 插件的内嵌页面才有 AI 能力，单独打开（127.0.0.1:8815）时没有该接口。'

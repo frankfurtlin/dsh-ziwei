@@ -266,13 +266,23 @@ try {
       return text.slice(text.indexOf('命理解读'))
     }
     // 面板是流式的：等到「追问」按钮重新出现（说明这一轮结束）且正文稳定
+    // 采样面板文本长度的增长节奏，用来验证「吐词平顺」：平滑之后应该每 100~200ms
+    // 都有新字出现，而不是一口气糊一大段、然后再干等。
+    const streamSamples = []
     const waitReading = async (mustMatch, timeoutMs = 150000) => {
       const started = Date.now()
       let last = ''
+      let lastIdleCheck = 0
+      let idle = false
       while (Date.now() - started < timeoutMs) {
-        await page.waitForTimeout(1500)
+        await page.waitForTimeout(150)
         const text = await panelText()
-        const idle = (await frame.locator('button:has-text("追问")').count()) > 0
+        streamSamples.push({ at: Date.now() - started, len: text.length })
+        // 追问按钮出现 = 这一轮流结束（每 900ms 才查一次，别把采样拖慢）
+        if (Date.now() - lastIdleCheck > 900) {
+          lastIdleCheck = Date.now()
+          idle = (await frame.locator('button:has-text("追问")').count()) > 0
+        }
         if (idle && text === last && mustMatch.test(text)) return text
         last = text
       }
@@ -280,6 +290,25 @@ try {
     }
 
     const reading = await waitReading(/【命格定性】/)
+    {
+      // 只看「开始出字之后、还没结束」的那一段
+      const grows = streamSamples.filter((item, index) => index > 0 && item.len > streamSamples[index - 1].len)
+      const firstGrow = grows.length ? grows[0].at : null
+      let maxStall = 0
+      for (let i = 1; i < grows.length; i += 1) {
+        maxStall = Math.max(maxStall, grows[i].at - grows[i - 1].at)
+      }
+      check(
+        '首字延迟在可接受范围（<20s）',
+        firstGrow !== null && firstGrow < 20000,
+        `first_grow=${firstGrow}ms`,
+      )
+      check(
+        '解读是匀速吐出来的（最长停顿 <1.2s）',
+        grows.length > 5 && maxStall < 1200,
+        `increments=${grows.length} max_stall=${maxStall}ms`,
+      )
+    }
     check('右侧面板自动生成了命格解读', /【命格定性】/.test(reading), `len=${reading.length}`)
     check(
       '解读由 DSH 模型生成，没有回退报错',

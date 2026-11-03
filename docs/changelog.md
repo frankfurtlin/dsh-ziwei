@@ -299,6 +299,29 @@
 `app/test-persistence.mjs` 的 `file` 断言加「不以 `/` 开头」。生产 44 项、persistence 16 项、
 内核回归 10 项全通过。
 
+## 16. 解读面板：首字更快、吐词更匀
+
+用户反馈「右侧的 AI 首词很慢，而且输出不够平滑，吐词不够均匀」。量了一下再改：
+
+**首字延迟 27.5s → 6.6s**
+
+- 先排除无效选项：`reasoningEffort: 'off'` / `'minimal'` 这个模型直接拒绝
+  （`provider "opencode-go" model "deepseek-v4.1-flash" does not support reasoning effort "off"`），
+  所以不能靠关掉思考提速。
+- 真正有效的是**在系统提示里限制内部推演**：定调后立刻写正文、不要逐宫罗列、不要预演小节。
+  同一张盘同一模型实测：首个 delta 27.51s → 6.62s，整段 33.07s → 12.44s。
+- 顺手把 `reasoningEffort` 做成可用 `DSH_ZIWEI_AI_REASONING` 覆盖，方便以后调参。
+
+**吐词节奏：最长停顿 1190ms → 170ms**
+
+- 采样发现上游 SSE 本来就不均匀：单块 1–24 字混杂，还有 0.6s、1.19s 的卡顿。这是
+  provider 侧的流式粒度，服务端无法让它变细。
+- 所以改在前端：`InsightPanel` 收到 delta 只进缓冲，用 30fps 定时器匀速放出，
+  放的速度跟积压量挂钩（积压多则单帧多放几个字，最多 24 字/帧），流结束再把尾巴放完。
+  肉眼效果是「字一直在出来」，而不是「糊一段→干等→再糊一段」。
+- `verify.mjs` 新增两条断言：首字 < 20s、最长停顿 < 1.2s（实测 `first_grow=4132ms`、
+  `increments=38 max_stall=170ms`）。
+
 ---
 
 ## 提交记录
