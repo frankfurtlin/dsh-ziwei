@@ -1,15 +1,9 @@
 /**
- * /knowledge/[star]/[topic] — SEO 落地页
+ * /knowledge/[star]/[topic] — 单颗主星在单个宫位的参考页
  *
- * 14 主星 × 13 topic = 182 个独立 URL
- * 每页含完整的 STAR_DB 4 段论断（一句话定调/核心论断/命盘依据/经典出处）
- *
- * SEO 要点：
- *  - title 含主关键词（如"紫微入命宫·倪海厦体系详解"）
- *  - description 用 dingdiao（一句话定调）
- *  - JSON-LD Article 结构化数据
- *  - 内链：同主星其他 12 宫 + 同宫其他 13 主星
- *  - generateStaticParams 静态生成，零运行时开销
+ * 14 主星 × 13 topic = 182 个 URL，都在内嵌环境里访问（不对外、不索引）。
+ * 有正文时渲染 STAR_DB 的四段（定调/论断/命盘依据/经典出处）；
+ * 没有正文时说明「为什么不预置断语」并指路到古籍库与排盘 + DSH 解读。
  */
 
 import Link from 'next/link';
@@ -24,12 +18,10 @@ import {
   STAR_TO_SLUG,
   SLUG_TO_STAR,
 } from '@/lib/seo/knowledge';
-import { SITE_URL } from '@/lib/site';
 
-// 允许动态参数：本仓库是开源排盘引擎版，`STAR_DB`（逐宫论断内容库）不在开源范围，
-// `generateStaticParams()` 因此返回 0 条路由；如果这里是 false，任何 /knowledge/<star>/<topic>
-// 都会 404（百科列表里的卡片全部点不进去）。改成 true 后由运行时渲染，页面内部按
-// 「内容是否存在」分支，缺内容时给出说明与替代入口，而不是死链接。
+// 允许动态参数：`STAR_DB`（逐宫论断内容库）当前为空，`generateStaticParams()` 返回 0 条；
+// 若这里是 false，182 个详情 URL 会全部 404（列表卡片全是死链）。运行时渲染后按
+// 「内容是否存在」分支：有正文就渲染，没有就给说明与替代入口。
 export const dynamicParams = true;
 
 export async function generateStaticParams() {
@@ -50,7 +42,7 @@ export async function generateMetadata({ params }: { params: Promise<{ star: str
     return {
       title: `${star}入${palaceName} · ${data.topicLabel}`,
       description: STAR_BRIEF_SEO[star]
-        || `${star}入${palaceName}的紫微斗数知识页（开源排盘引擎版暂未收录逐宫论断正文）。`,
+        || `${star}入${palaceName}：星曜本义与古籍出处；播到你的盘上时由 DSH 的模型现场解读。`,
       robots: { index: false, follow: false },
     };
   }
@@ -62,19 +54,11 @@ export async function generateMetadata({ params }: { params: Promise<{ star: str
   return {
     title,
     description,
-    openGraph: {
-      title,
-      description,
-      type: 'article',
-      url: `${SITE_URL}/knowledge/${slug}/${topic}`,
-    },
-    alternates: {
-      canonical: `${SITE_URL}/knowledge/${slug}/${topic}`,
-    },
+    robots: { index: false, follow: false },
     keywords: [
       '紫微斗数', '倪海厦', star, data.palaceName, data.topicLabel,
       `${star}${data.palaceName}`, `${star}入${palaceName}`,
-      `紫微斗数 ${star}`, '倪海厦紫微斗数', '紫微斗数全集',
+      `紫微斗数 ${star}`, '紫微斗数全集',
     ],
   };
 }
@@ -83,8 +67,7 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
   const { star: slug, topic } = await params;
   const star = SLUG_TO_STAR[slug];
   if (!star) notFound();
-  // 开源版没有 STAR_DB：data.exists 恒为 false。这里不再直接 notFound()，
-  // 否则百科列表里 14×13 张卡片全是死链；缺内容时下面会渲染一段说明 + 替代入口。
+  // STAR_DB 为空时 data.exists 恒为 false；不直接 notFound()，否则列表里的卡片全是死链。
   const data = getKnowledge(star, topic as TopicKey);
   const palaceName = withPalace(data.palaceName);
 
@@ -99,15 +82,9 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
     '@type': 'Article',
     headline: `${star}入${palaceName} · ${data.topicLabel}`,
     description: data.parsed.dingdiao,
-    author: { '@type': 'Organization', name: '紫微研究 · 倪海厦正宗' },
-    publisher: {
-      '@type': 'Organization',
-      name: '紫微研究',
-      url: SITE_URL,
-    },
+    author: { '@type': 'Organization', name: '紫微斗数 · 倪海厦体系' },
     datePublished: '2026-04-28',
     dateModified: '2026-04-28',
-    mainEntityOfPage: `${SITE_URL}/knowledge/${slug}/${topic}`,
     articleSection: '紫微斗数 · 倪海厦体系',
     keywords: [`紫微斗数`, star, data.palaceName, data.topicLabel].join(', '),
   };
@@ -121,11 +98,11 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
       {/* 顶栏 */}
       <div className="px-6 py-4 flex items-center justify-between"
         style={{ borderBottom: '1px solid rgba(184,146,42,0.15)', background: 'var(--bg-page)' }}>
-        <Link href="/" style={{ fontSize: '12px', color: 'var(--ac)', letterSpacing: '0.3em', textDecoration: 'none' }}>
-          ← 首页
+        <Link href="/chart" style={{ fontSize: '12px', color: 'var(--ac)', letterSpacing: '0.3em', textDecoration: 'none' }}>
+          ← 排盘
         </Link>
         <div style={{ fontSize: '12px', color: 'var(--tx-3)', letterSpacing: '0.2em' }}>
-          倪师方法论 · 知识库
+          知识库
         </div>
         <Link href="/chart" style={{ fontSize: '12px', color: 'var(--ac)', letterSpacing: '0.2em', textDecoration: 'none' }}>
           起盘 →
@@ -135,7 +112,7 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
       <article className="max-w-3xl mx-auto px-6 py-12">
         {/* 面包屑 */}
         <nav style={{ fontSize: '11px', color: 'var(--tx-3)', letterSpacing: '0.1em', marginBottom: '16px' }}>
-          <Link href="/" style={{ color: 'var(--tx-3)', textDecoration: 'none' }}>首页</Link>
+          <Link href="/chart" style={{ color: 'var(--tx-3)', textDecoration: 'none' }}>排盘</Link>
           <span style={{ margin: '0 8px' }}>/</span>
           <Link href="/knowledge" style={{ color: 'var(--tx-3)', textDecoration: 'none' }}>知识库</Link>
           <span style={{ margin: '0 8px' }}>/</span>
@@ -159,17 +136,17 @@ export default async function KnowledgePage({ params }: { params: Promise<{ star
           )}
         </header>
 
-        {/* 内容缺失时的说明（开源排盘引擎版没有逐宫论断内容库） */}
+        {/* 这里不存断语：逐宫吉凶由 DSH 的模型对着真实盘面现场生成，避免千人一面的模板话 */}
         {!data.exists && (
-          <Section title="本页暂无收录的论断正文" gradient>
+          <Section title="这一页不预置断语" gradient>
             <p style={{ fontSize: '14px', color: 'var(--tx-0)', lineHeight: 2, marginBottom: '10px' }}>
-              这一版是<strong>开源排盘引擎</strong>：安星、四化、格局、古籍原典都完整开放，
-              但「{star}入{palaceName} · {data.topicLabel}」的逐宫论断内容库不在开源范围，
-              所以这一页没有对应的正文。
+              紫微斗数里「{star}入{palaceName}」的吉凶，要结合亮度、四化、三方四正和所在大限一起看，
+              写成固定模板反而会误导。所以这一页只留星曜本义与古籍出处；具体到你自己的盘，
+              由 DSH 的模型对着盘面现场解读。
             </p>
             <p style={{ fontSize: '13px', color: 'var(--tx-2)', lineHeight: 1.9 }}>
-              你可以：看上方这颗星的基本属性 →{' '}
-              <Link href="/library" style={{ color: 'var(--ac)', textDecoration: 'none' }}>去古籍库读原典</Link> →{' '}
+              可以：看上方这颗星的基本属性 →{' '}
+              <Link href="/library" style={{ color: 'var(--ac)', textDecoration: 'none' }}>查古籍原文</Link> →{' '}
               <Link href="/chart" style={{ color: 'var(--ac)', textDecoration: 'none' }}>起一张盘，让 DSH 的模型针对你的盘解读</Link>。
             </p>
           </Section>

@@ -31,7 +31,7 @@
 | `lib/index.js` | host 半：注册 `prefix /ziwei` 反向代理 → `http://127.0.0.1:8815`，先过 DSH 自己的登录闸门；`/ziwei/ai`（模型解读）与 `/ziwei/birth`（生辰配置）走自己的 handler |
 | `lib/ai.js` | host 半：解读接口，用 `ctx.llm.stream()` 调宿主模型，SSE 流式回吐 |
 | `lib/birth-store.js` | host 半：生辰的服务端存储，读写 `$DSH_HOME/ziwei/birth.json`（0600） |
-| `client.js` | client 半：注册侧栏行（panellist 座位）+ 主面板（main 座位，keyed=`ziwei`）；面板顶部分段控件切换排盘/合盘/古籍/百科四个视图，内嵌同源 iframe |
+| `client.js` | client 半：注册侧栏行（panellist 座位）+ 主面板（main 座位，keyed=`ziwei`）；面板顶部分段控件切换排盘/古籍/百科三个视图，内嵌同源 iframe |
 | `verify.mjs` | 真实浏览器验收（playwright），默认打测试实例，可指定生产地址 |
 | `restart-and-verify.sh` | 生产重启 + 自动验收，脱离当前会话执行（见下） |
 
@@ -132,15 +132,24 @@
    同时复制一份到剪贴板兜底。
 3. 会话里就是完整的命盘 + 你补充的问题，按回车即开始解读。
 
-### 面板里的四个视图
+### 面板里的三个视图
 
-工具条右侧是分段控件，`排盘 / 合盘 / 古籍 / 百科` 分别对应应用里的
-`/ziwei/chart`、`/ziwei/heming`、`/ziwei/library`、`/ziwei/knowledge`：
+工具条右侧是分段控件，`排盘 / 古籍 / 百科` 分别对应应用里的
+`/ziwei/chart`、`/ziwei/library`、`/ziwei/knowledge`
+（合盘页只有「调应用内 AI 接口」一条路，应用内 AI 已经去掉，所以不再放进来）：
 
 - 切换时重建 iframe（`switchView`），并清掉上一张盘摘要，避免「让 DSH 解读」拿到错盘的文本；
 - 每个视图的 URL 都带上 `?theme=<宿主题>`，配色继续跟随 DSH 外壳；
 - iframe 上有 `data-dsh-ziwei-frame="<view>"`、按钮上有 `data-dsh-ziwei-tab="<view>"`，
   验收脚本靠它们断言「确实切过去了」。
+
+### 工具条上的两个小功能
+
+- **最近生辰**：宿主把用过的生辰存在 `$DSH_HOME/ziwei/birth.json`（最多 20 条去重），
+  工具条「最近生辰 ▾」直接列出最近 5 条，点一条即换成那张盘；表单页顶部也有「最近用过」
+  的胶囊按钮。不写浏览器存储，换浏览器也在。
+- **复制盘面摘要**：把 `digestChart()` 生成的命盘文本复制到剪贴板，可以直接贴进任意会话，
+  不必经过「让 DSH 解读」开新会话。
 
 ### 命盘页上的三处零件
 

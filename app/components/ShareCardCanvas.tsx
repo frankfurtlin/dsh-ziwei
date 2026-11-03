@@ -8,7 +8,6 @@
  */
 
 import type { ZiweiChart } from '@/lib/ziwei/types';
-import { SITE_HOST } from '@/lib/site';
 
 const BRANCH_NAMES = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
 
@@ -104,7 +103,7 @@ export default function ShareCardCanvas({ chart, birth, highlight }: ShareCardPr
             {birth.city && <><span style={{ margin: '0 4px', color: '#b8922a' }}>·</span>{birth.city}</>}
           </div>
           <div style={{ fontSize: '8px', color: '#b8922a', letterSpacing: '0.08em', marginTop: '2px' }}>
-            {SITE_HOST}
+            DSH · 紫微斗数
           </div>
         </div>
       </div>
