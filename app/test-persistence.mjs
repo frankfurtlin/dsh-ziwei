@@ -94,7 +94,9 @@ try {
   check('表单快照一并保存（重新起盘可回填）', Boolean(afterSubmit.payload?.current?.form?.year));
   check(
     '配置文件路径由宿主侧返回',
-    typeof afterSubmit.payload?.file === 'string' && afterSubmit.payload.file.endsWith('birth.json'),
+    typeof afterSubmit.payload?.file === 'string' &&
+      afterSubmit.payload.file.endsWith('birth.json') &&
+      !afterSubmit.payload.file.startsWith('/'),
     afterSubmit.payload?.file ?? 'n/a',
   );
   const legacy = await page.evaluate((k) => window.localStorage.getItem(k), legacyKey);

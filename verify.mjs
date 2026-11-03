@@ -519,6 +519,19 @@ try {
     await page.screenshot({ path: path.join(outDir, '04-ask-draft.png') })
   }
 
+  // ---- 生辰接口不泄漏本机路径 ----
+  {
+    const birthInfo = await page.evaluate(async () => {
+      const res = await fetch('/ziwei/birth', { headers: { accept: 'application/json' } })
+      return { status: res.status, body: await res.json().catch(() => null) }
+    })
+    check(
+      '生辰接口只回相对位置，不泄漏本机绝对路径',
+      birthInfo.status === 200 && birthInfo.body?.file === 'ziwei/birth.json',
+      `status=${birthInfo.status} file=${birthInfo.body?.file}`,
+    )
+  }
+
   const fatalErrors = consoleErrors.filter((text) => !/Failed to load resource/.test(text))
   check('无控制台 JS 报错', fatalErrors.length === 0, fatalErrors.slice(0, 3).join(' | ') || 'clean')
 
