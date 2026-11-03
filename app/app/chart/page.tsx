@@ -10,7 +10,8 @@ import StarDetailPanel from '@/components/StarDetailPanel';
 import { generateChart } from '@/lib/ziwei/algorithm';
 import { digestChart } from '@/lib/ziwei/digest';
 import { detectPatterns, getMingGongSummary } from '@/lib/ziwei/patterns';
-import { clearSavedBirth, listRecentBirths, loadSavedBirth, saveBirth } from '@/lib/birth-storage';
+import { clearSavedBirth, isRealDate, listRecentBirths, loadSavedBirth, saveBirth } from '@/lib/birth-storage';
+import { formToBirthInfo } from '@/lib/ziwei/share';
 import type { StoredBirth } from '@/lib/birth-storage';
 import type { BirthInfo, ZiweiChart, Palace, Star } from '@/lib/ziwei/types';
 
@@ -48,8 +49,9 @@ function readSharedBirth(): BirthInfo | null {
   const month = Number(matched[2]);
   const day = Number(matched[3]);
   const hour = Number(matched[4]);
-  if (year < 1900 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) return null;
-  if (hour < 0 || hour > 11) return null;
+  // 只校验范围不够：1990-2-31 能过范围校验，但排盘引擎会抛 RangeError → 整页白屏
+  if (!isRealDate(year, month, day)) return null;
+  if (!Number.isInteger(hour) || hour < 0 || hour > 11) return null;
   const info: BirthInfo = { year, month, day, hour, gender: params.get('g') === 'f' ? 'female' : 'male' };
   const name = params.get('n');
   if (name) info.name = name;
@@ -83,7 +85,25 @@ export default function ChartPage() {
   const [recent, setRecent] = useState<StoredBirth[]>([]);
   const [recentOpen, setRecentOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const formSnapshotRef = useRef<Record<string, unknown> | undefined>(undefined);
+  // 排盘失败时的可读提示（典型场景：分享链接/历史记录里的日期不存在）
+  const [chartError, setChartError] = useState('');
+  const formSnapshotRef = useRef<BirthFormState | undefined>(undefined);
+
+  /** 排盘并兜住异常：非法日期不应该让整页白屏 */
+  const safeChart = (info: BirthInfo): ZiweiChart | null => {
+    if (!isRealDate(info.year, info.month, info.day)) {
+      setChartError('这条生辰的公历日期不存在（例如 2 月 31 日），请重新填写。');
+      return null;
+    }
+    try {
+      const next = generateChart(info);
+      setChartError('');
+      return next;
+    } catch (error) {
+      setChartError(`排盘失败：${(error as Error)?.message || '日期不合法'}`);
+      return null;
+    }
+  };
 
   // ── 宿主（DSH 插件面板）会量出宠物浮层的遮挡区域发过来 ──
   const [petInsets, setPetInsets] = useState({ bottom: 0, right: 0 });
@@ -102,18 +122,30 @@ export default function ChartPage() {
   // ── 挂载时优先用分享链接里的生辰，其次从服务端恢复上次生辰 ──
   useEffect(() => {
     const sharedBirth = readSharedBirth();
+    if (!sharedBirth && new URLSearchParams(window.location.search).get('b')) {
+      // 链接里的生辰日期不存在（如 2-31）：别整页白屏，回到手工输入并说明原因
+      setChartError('链接里的生辰日期不合法（例如 2 月 31 日），已回到手工输入。');
+    }
     if (sharedBirth) {
       setShared(true);
       setSubmitted(true);
-      setChart(generateChart(sharedBirth));
+      const next = safeChart(sharedBirth);
+      if (next) setChart(next);
+      else setShared(false);
       return;
     }
     let alive = true;
     void loadSavedBirth().then((stored) => {
       if (!alive || !stored) return;
       setSaved(stored);
-      setChart(generateChart(stored.info));
-      setRestored(true);
+      const next = safeChart(stored.info);
+      if (next) {
+        setChart(next);
+        setRestored(true);
+      } else {
+        // 配置文件里是坏记录：别让它每次打开都失败
+        void clearSavedBirth();
+      }
     });
     return () => {
       alive = false;
@@ -128,15 +160,20 @@ export default function ChartPage() {
     refreshRecent();
   }, []);
 
-  const handleSubmit = (info: BirthInfo) => {
+  const handleSubmit = (rawInfo: BirthInfo) => {
     const form = formSnapshotRef.current;
+    // 23:00-23:59 是「晚子时」，按次日排盘；合盘页一直走 formToBirthInfo，
+    // 排盘页以前直接吃 BirthForm 给的 day，两页会排出不同的盘 —— 这里统一。
+    const info = form ? formToBirthInfo(form) : rawInfo;
+    const next = safeChart(info);
+    if (!next) return;
     setSubmitted(true);
     setRestored(false);
     setSelectedPalace(null);
     setStarDetail(null);
-    setChart(generateChart(info));
+    setChart(next);
     // 写配置文件（失败不影响这次排盘，只是下次不自动恢复）
-    void saveBirth(info, form).then((stored) => {
+    void saveBirth(info, form as unknown as Record<string, unknown> | undefined).then((stored) => {
       if (stored) setSaved(stored);
       refreshRecent();
     });
@@ -151,13 +188,15 @@ export default function ChartPage() {
 
   /** 用一条已有生辰直接起盘（最近列表点选时用） */
   const applyBirth = (info: BirthInfo) => {
+    const next = safeChart(info);
+    if (!next) return;
     setSubmitted(true);
     setRestored(false);
     setShared(false);
     setSelectedPalace(null);
     setStarDetail(null);
     setRecentOpen(false);
-    setChart(generateChart(info));
+    setChart(next);
     void saveBirth(info).then((stored) => {
       if (stored) setSaved(stored);
       refreshRecent();
@@ -229,6 +268,24 @@ export default function ChartPage() {
         <p style={{ color: 'var(--t-text2)', marginBottom: 32, fontSize: 14, lineHeight: 1.7 }}>
           输入出生年月日时，本机排盘引擎即时生成命盘。
         </p>
+        {chartError && (
+          <p
+            data-ziwei-error
+            role="alert"
+            style={{
+              marginBottom: 16,
+              padding: '10px 12px',
+              borderRadius: 10,
+              border: '1px solid rgba(168,50,40,0.35)',
+              background: 'rgba(168,50,40,0.08)',
+              color: '#A83228',
+              fontSize: 13,
+              lineHeight: 1.6,
+            }}
+          >
+            {chartError}
+          </p>
+        )}
         {recent.length > 0 && (
           <div data-ziwei-recent-form style={{ marginTop: 0, marginBottom: 18, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
             <span style={{ fontSize: 12, color: 'var(--t-faint)' }}>最近用过：</span>
@@ -253,7 +310,7 @@ export default function ChartPage() {
           onSubmit={handleSubmit}
           initialData={saved?.form as Partial<BirthFormState> | undefined}
           onFormSave={(data) => {
-            formSnapshotRef.current = data as unknown as Record<string, unknown>;
+            formSnapshotRef.current = data as unknown as BirthFormState;
           }}
         />
         {saved && (
@@ -478,7 +535,14 @@ export default function ChartPage() {
           )}
         </div>
 
-        <InsightPanel chart={chart} selectedPalace={selectedPalace} autoRun={submitted} petInsets={petInsets} />
+        <InsightPanel
+        // 换一张盘就重建面板：否则旧盘的解读正文与追问历史会作为上下文继续发给模型
+        key={chart ? digestChart(chart).slice(0, 24) + String(chart.birthInfo.year) + chart.birthInfo.hour : 'empty'}
+        chart={chart}
+        selectedPalace={selectedPalace}
+        autoRun={submitted}
+        petInsets={petInsets}
+      />
       </div>
 
       <ShareModal

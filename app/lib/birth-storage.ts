@@ -28,17 +28,28 @@ export interface StoredBirth {
   form?: Record<string, unknown>;
 }
 
-function isValidInfo(value: unknown): value is BirthInfo {
+/**
+ * 公历日期是否真实存在。
+ *
+ * 只校验「1–31」是不够的：1990-2-31 能通过范围校验，但排盘引擎会抛
+ * `RangeError: solar date does not exist`，恢复盘面时整页白屏。
+ */
+export function isRealDate(year: number, month: number, day: number): boolean {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return false;
+  if (year < 1900 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+export function isValidInfo(value: unknown): value is BirthInfo {
   if (!value || typeof value !== 'object') return false;
   const info = value as Record<string, unknown>;
   const num = (key: string) => typeof info[key] === 'number' && Number.isFinite(info[key] as number);
-  return (
-    num('year') &&
-    num('month') &&
-    num('day') &&
-    num('hour') &&
-    (info.gender === 'male' || info.gender === 'female')
-  );
+  if (!(num('year') && num('month') && num('day') && num('hour'))) return false;
+  if (info.gender !== 'male' && info.gender !== 'female') return false;
+  const { year, month, day, hour } = info as { year: number; month: number; day: number; hour: number };
+  if (!Number.isInteger(hour) || hour < 0 || hour > 11) return false;
+  return isRealDate(year, month, day);
 }
 
 function normalize(record: unknown): StoredBirth | null {

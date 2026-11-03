@@ -33,7 +33,8 @@ export async function generateStaticParams() {
 export async function generateMetadata({ params }: { params: Promise<{ star: string; topic: string }> }) {
   const { star: slug, topic } = await params;
   const star = SLUG_TO_STAR[slug];
-  if (!star) return {};
+  // 未知星级或未知 topic 一律 404：以前会把 undefined 传进 withPalace() 直接 500
+  if (!star || !ALL_TOPICS.includes(topic as (typeof ALL_TOPICS)[number])) return {};
   const data = getKnowledge(star, topic as TopicKey);
   // TOPIC_PALACE_NAME 里「命宫」自带「宫」字，其余是「夫妻」「官禄」这种；统一成「XX宫」
   const palaceName = withPalace(data.palaceName);
@@ -66,7 +67,7 @@ export async function generateMetadata({ params }: { params: Promise<{ star: str
 export default async function KnowledgePage({ params }: { params: Promise<{ star: string; topic: string }> }) {
   const { star: slug, topic } = await params;
   const star = SLUG_TO_STAR[slug];
-  if (!star) notFound();
+  if (!star || !ALL_TOPICS.includes(topic as (typeof ALL_TOPICS)[number])) notFound();
   // STAR_DB 为空时 data.exists 恒为 false；不直接 notFound()，否则列表里的卡片全是死链。
   const data = getKnowledge(star, topic as TopicKey);
   const palaceName = withPalace(data.palaceName);

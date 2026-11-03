@@ -162,6 +162,8 @@ export default function InsightPanel({
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
+  // 页面卸载（切走 iframe / 关面板）时取消在途请求，别让模型白跑
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const run = useCallback(
     async (question: string, nextTopic: TopicKey) => {
@@ -202,9 +204,11 @@ export default function InsightPanel({
         );
       } catch (caught) {
         const message = String((caught as Error)?.message || caught);
-        const friendly = /Failed to fetch|NetworkError|500/.test(message)
+        const friendly = /Failed to fetch|NetworkError|50\d/.test(message)
           ? '解读服务没接通：这里是 DSH 插件的内嵌页面才有 AI 能力，单独打开（127.0.0.1:8815）时没有该接口。'
-          : message;
+          : /返回 40[134]/.test(message)
+            ? '解读服务不可用（可能登录状态已过期，或当前页面不是从 DSH 插件面板打开的），刷新页面后可重试。'
+            : message;
         setError(friendly);
         setMessages((prev) => prev.filter((item, index) => index !== prev.length - 1 || item.content));
       } finally {
