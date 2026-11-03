@@ -5,18 +5,18 @@
 
 - 服务：`dsh-ziwei-app.service`，`node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 8815`
 - `basePath = /ziwei`（`next.config.js` 与 `NEXT_PUBLIC_BASE_PATH` 一致），所以所有路由都是 `/ziwei/...`
-- 环境：`NODE_ENV=production`，`EnvironmentFile=app/.env.local`；`.env.local` 里现在只剩 `NEXT_PUBLIC_*` 一类非敏感配置
+- 环境：`NODE_ENV=production`，`EnvironmentFile=app/.env.local`；应用不需要任何密钥（解读走宿主的 `/ziwei/ai`）
+- 已删除的页面：`/heming`（合盘，依赖应用内 AI）、`/preview`（开场动画）、`/privacy`、`/terms`、
+  `robots.txt`、`sitemap.xml` —— 它们是原开源站点的落地页/合规页，插件内既无入口也无意义
 
 ## 路由表
 
 | 路由 | 文件 | 在插件里怎么进 |
 | --- | --- | --- |
 | `/ziwei/chart` | `app/chart/page.tsx` | 面板「排盘」（默认视图） |
-| `/ziwei/heming` | `app/heming/page.tsx` | 面板「合盘」 |
 | `/ziwei/library`、`/ziwei/library/[book]`、`/ziwei/library/[book]/[chapter]`、`/ziwei/library/search` | `app/library/**` | 面板「古籍」 |
 | `/ziwei/knowledge`、`/ziwei/knowledge/[star]/[topic]` | `app/knowledge/**` | 面板「百科」 |
-| `/ziwei/`（落地页）、`/ziwei/preview`（开场动画） | `app/page.tsx`、`app/preview/page.tsx` | 不直接进面板；「新窗口打开」指向落地页 |
-| `/ziwei/privacy`、`/ziwei/terms`、`robots.txt`、`sitemap.xml` | 静态/元数据 | 保留，合规用 |
+| `/ziwei`、`/ziwei/` | `app/page.tsx` | 308/307 重定向到 `/ziwei/chart`（插件内没有落地页） |
 
 `/api/interpret`（应用自带的 AI 解读接口）**已删除**：解读只走插件的 `/ziwei/ai` → DSH 模型。
 
@@ -24,8 +24,10 @@
 
 这是唯一重度改造过的页面。自上而下：
 
-1. **工具条**：`← 重新起盘`、`分享命盘`、生辰状态（「已恢复上次记住的生辰 · 忘记」／
-   「正在查看分享链接里的命盘」）。
+1. **工具条**：`← 重新起盘`、`分享命盘`、`最近生辰 ▾`（列最近 5 条，点一条换盘）、
+   `复制盘面摘要`（`digestChart` 文本进剪贴板）、生辰状态（「已恢复上次记住的生辰 · 忘记」／
+   「正在查看分享链接里的命盘」）。表单页顶部还有「最近用过」胶囊，同样来自
+   `/ziwei/birth` 的 history。
 2. **概览条 + 抽屉**：常驻一行 `命宫 · 主星 | 五行局 | 格局 N 个`，点「展开命盘概览」
    在盘面上方展开 `ChartSummary`（命格总览 / 本命四化 / 格局识别），再点收起。
 3. **盘面** `ChartBoard`：4×4 宫格，本命/大限/流年三视图（`TimeNav` 在 `ChartBoard` 内部），
@@ -63,11 +65,10 @@
 | `ShareModal` / `ShareCardCanvas` | 分享图与分享链接 | html2canvas 生成 PNG；`captureShareCard()` / `downloadDataURL()` |
 | `InsightPanel` | 右栏解读面板 | 六 tab、SSE 流式、`RichText` 极简渲染、`petInsets` 让位 |
 | `ThemeProvider` | 主题（浅/深，默认浅色） | 读 `?theme=` 强制指定；监听 `dsh-ziwei:theme` 消息 |
-| `StarField` / `ScrollIntro` | 落地页星空与开场动画 | 仅 `/ziwei/`、`/ziwei/preview` 用 |
 | `TimeNav` | 时间导航（本命/大限/流年） | 被 `ChartBoard` 内部引用 |
 
 已删除：`PatternsCard`（与概览里的「格局识别」重复）、`FamousPersonCard`（依赖 server-only
-且没有入口）、`ChatPanel`（自带 AI 面板）。
+且没有入口）、`ChatPanel`（自带 AI 面板）、`StarField` + `ScrollIntro`（落地页/开场动画专用）。
 
 ## 内核模块清单（`lib/ziwei/`，合计约 5300 行）
 
@@ -85,11 +86,14 @@
 | `lunar-solar.ts` / `lunar-javascript.d.ts` | 农历⇄公历换算（只做历法，不做命理） |
 | `shier-shen.ts` | 将前十二神 / 岁前十二神 |
 | `school-config.ts` / `school-data.ts` / `school-tables.generated.ts` | 9 类排盘流派开关与安星整数表（生成文件勿手改） |
-| `heming-knowledge.ts` | 合盘知识库（倪海厦《天纪》+《紫微斗数全书》断语） |
 | `digest.ts`（91 行） | **为插件新加**：把 `ZiweiChart` 压成给模型看的纯文本摘要 |
-| `db-analysis.ts` | 开源占位版断语库（真内容不在开源范围） |
-| `famous.ts` | 名人命盘数据（server-only，暂无入口） |
-| `history.ts` / `share.ts` / `yunxian-context.ts` | 前端历史记录、分享参数编解码、运限视图上下文 |
+| `db-analysis.ts` | 断语库占位（`STAR_DB` 为空；逐宫断语改由 DSH 的模型现场生成） |
+| `famous.ts` | 名人命盘样本（只被回归测试用；页面已无入口） |
+| `share.ts` / `yunxian-context.ts` | 分享参数编解码、运限视图上下文 |
+
+> 上游开源项目带来的 `.github/`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`DATASET-LICENSE`、
+> `README.en.md`、`docs/`（1848 条天纪引文语料）、`verification-birth/`、以及根目录那份开源
+> README，都是「作为独立开源仓库」才需要的东西，已随本次改造删除；`LICENSE`（MIT）保留。
 
 ## 主题与设计 token（`app/globals.css`）
 

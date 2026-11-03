@@ -384,6 +384,34 @@ try {
     await page.screenshot({ path: path.join(outDir, '08-share.png') })
     await frame.locator('button:has-text("×")').first().click({ force: true }).catch(() => {})
 
+    // ── 8.5 最近生辰：服务端记着的生辰能直接复用 ──
+    const recentButton = frame.locator('[data-ziwei-recent]')
+    if (await recentButton.count()) {
+      await recentButton.click()
+      const recentList = frame.locator('[data-ziwei-recent-list]')
+      await recentList.waitFor({ state: 'visible', timeout: 10000 })
+      const recentText = await recentList.innerText()
+      check('「最近生辰」列出服务端记住的生辰', /1990/.test(recentText) && /时/.test(recentText), recentText.replace(/\s+/g, ' ').slice(0, 60))
+      // 点第一条：应该换成那张盘（生辰相同，至少工具条还在、盘面仍在）
+      await recentList.locator('button').first().click({ force: true })
+      await page.waitForTimeout(800)
+      check('点「最近生辰」能直接换成那张盘', (await frame.locator('[data-ziwei-brief]').count()) > 0)
+    } else {
+      check('「最近生辰」入口存在', false, '没有找到 [data-ziwei-recent]')
+    }
+
+    // ── 8.6 复制盘面摘要（方便直接贴进 DSH 会话）──
+    const copyButton = frame.locator('[data-ziwei-copy]')
+    check('工具条有「复制盘面摘要」按钮', (await copyButton.count()) > 0)
+    await copyButton.click()
+    await page.waitForTimeout(600)
+    const copiedText = await page.evaluate(() => navigator.clipboard.readText().catch(() => ''))
+    check(
+      '复制出来的摘要含命盘要点',
+      /【基本信息】/.test(copiedText) && /十二宫/.test(copiedText) && copiedText.length > 400,
+      `len=${copiedText.length}`,
+    )
+
     // ── 9. 分享链接回放：另开一个页面直接还原同一张盘 ──
     const sharedPage = await context.newPage()
     try {
@@ -407,7 +435,7 @@ try {
       await sharedPage.close().catch(() => {})
     }
 
-    // ── 10. 面板二级入口：合盘 / 古籍 / 百科 / 回到排盘 ──
+    // ── 10. 面板二级入口：古籍 / 百科 / 回到排盘 ──
     const currentFrameUrl = () => page.frames().find((item) => item.url().includes('/ziwei/'))?.url() ?? ''
     async function switchPanelView(key, expectedPath) {
       await page.locator(`button[data-dsh-ziwei-tab="${key}"]`).click({ force: true })
@@ -419,8 +447,8 @@ try {
       }
       return currentFrameUrl()
     }
-    const hemingUrl = await switchPanelView('heming', '/ziwei/heming')
-    check('面板能切到「合盘」', hemingUrl.includes('/ziwei/heming'), hemingUrl)
+    check('面板里不再有「合盘」（该页依赖应用内 AI，已随 AI 面板移除）',
+      (await page.locator('button[data-dsh-ziwei-tab="heming"]').count()) === 0)
     const libraryUrl = await switchPanelView('library', '/ziwei/library')
     check('面板能切到「古籍」', libraryUrl.includes('/ziwei/library'), libraryUrl)
     const knowledgeUrl = await switchPanelView('knowledge', '/ziwei/knowledge')

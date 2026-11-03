@@ -176,6 +176,57 @@
 
 ---
 
+## 12. 去掉开源项目的影子，只留插件形态（+ 两个小功能）
+
+搬进插件仓库之后，`app/` 里仍然留着「这是一个对外开源站点」的全部零件。插件是跑在本机、
+登录之后才看得到的内部工具，这些零件没有一样用得上，反而处处露出上游的痕迹。这一轮按
+「最小可用插件」重排：
+
+**删掉（作为独立站点才需要）**
+
+- 营销落地页 `app/page.tsx`（1125 行：Hero、课程路线、AI 答疑、支付与会员话术）—— 改成
+  `redirect('/chart')`，`/ziwei` 只是把误入的访问者送回排盘页；
+- `app/preview`（开场动画）、`app/privacy`（写着手机号/会员/支付宝/Claude 数据出境）、
+  `app/terms`、`app/sitemap.ts`、`app/robots.ts`；
+- `app/heming`（合盘）—— 它唯一的数据源是已删除的 `app/api/heming`，页面自己都写着
+  「开源版不含合盘 AI 分析接口」，属于死功能；
+- 上游仓库脚手架：`.github/`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`DATASET-LICENSE`、
+  `README.en.md`、上游 `README.md`、`docs/`（2.7M，含 1848 条天纪引文语料，运行时不引用）、
+  `verification-birth/`、空目录 `app/api/`；
+- 只为落地页服务的组件：`StarField`、`ScrollIntro`、`lib/heming-knowledge.ts`、`lib/site.ts`。
+
+**改掉（口径从「对外产品」改成「本机插件」）**
+
+- `layout.tsx` metadata 精简成 `紫微斗数` + 一句插件说明 + `robots: noindex, nofollow`，
+  去掉 canonical/OpenGraph/站长验证码；
+- 古籍库、知识库顶栏的「← 返回首页」→「← 排盘」、「倪师方法论 ·」前缀去掉，页脚合规话术
+  换成「收录范围为公版明刊本的精华段落」；
+- 百科详情页的占位文案改成插件口径：不预置断语，星曜本义与古籍出处保留，具体到你的盘
+  由 DSH 的模型现场解读；
+- 分享卡底部由站点域名改「DSH · 紫微斗数」；表单按钮「立即起盘 · 解命运密码」→「立即起盘」；
+- `.env*` 全部重写：应用不需要任何密钥（解读走宿主 `/ziwei/ai`，生辰走 `/ziwei/birth`），
+  旧内置 AI 的 `AI_*` 变量清空。
+
+**加两个「插件才成立」的小功能**
+
+- **最近生辰**：host 半本来就把用过的生辰写进 `$DSH_HOME/ziwei/birth.json`（去重、最多 20 条），
+  现在把这笔数据用起来 —— 工具条「最近生辰 ▾」列最近 5 条，点一条直接换盘；表单页顶部也有
+  「最近用过」胶囊。数据在服务端，换浏览器、清缓存都在。
+- **复制盘面摘要**：把 `digestChart()` 生成的文本复制到剪贴板，可以直接贴进任意会话，
+  不必先开新会话。
+
+**面板视图 4 → 3**：去掉「合盘」（依赖已删除的应用内 AI），只剩排盘 / 古籍 / 百科；
+`client.js` 的 `VIEWS` 与验收断言同步。
+
+**踩坑**：`redirect('/chart')` 在 `basePath=/ziwei` 下会被 Next 自动加前缀，写成
+`redirect('/ziwei/chart')` 会变成 `/ziwei/ziwei/chart`；另外 `/ziwei/` 的 308 是 Next 自己
+去掉末尾斜杠，不是我们的重定向。
+
+自测：`tsc --noEmit`、`next build`、`verify.mjs` 42 项全 PASS、`app/test-persistence.mjs` 16 项
+全 PASS、`/ziwei/{heming,preview,privacy}` 均 404、`/ziwei` 307 → `/ziwei/chart` 200。
+
+---
+
 ## 提交记录
 
 ```text
@@ -194,6 +245,6 @@ c61500d fix(host): 502 文案与验收脚本指向搬移后的应用
 
 | 脚本 | 项数 | 覆盖 |
 | --- | --- | --- |
-| `verify.mjs`（`--ask`） | 38 | 侧栏入口与顺序、鉴权 401、面板与四视图、起盘、配色、版面撑满、宠物让位、生辰服务端存储、解读面板（自动生成/切 tab/追问）、概览抽屉、点星详情、分享卡与分享链接、「让 DSH 解读」建会话 + 草稿 + 剪贴板、无 console 报错 |
+| `verify.mjs`（`--ask`） | 42 | 侧栏入口与顺序、鉴权 401、面板与三个视图、起盘、配色、版面撑满、宠物让位、生辰服务端存储、最近生辰、复制盘面摘要、解读面板（自动生成/切 tab/追问）、概览抽屉、点星详情、分享卡与分享链接、「让 DSH 解读」建会话 + 草稿 + 剪贴板、无 console 报错 |
 | `app/test-persistence.mjs` | 16 | 清空 → 起盘写配置 → 重载恢复 → 换浏览器上下文恢复 → 重新起盘回填 → 忘记清空 → 还原原记录 |
 | `app/npm test` | 10 | 排盘内核回归（盘面完整性、DST、节气边界、红鸾天喜、双四化、命名中立性…） |
