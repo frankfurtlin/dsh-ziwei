@@ -33,6 +33,17 @@ window.__ModuleLoader__.load({
     var DEFAULT_QUESTION =
       "请先做整体解读：命格与命宫主星格局、三方四正、生年四化落宫、当前大限与今年的重点，最后给 3 条可执行的建议。";
 
+    /**
+     * 面板里可切换的四张页面（同一个应用，不同路由）。
+     * 之前只嵌排盘页，合盘 / 古籍 / 百科在面板里干脆没有入口。
+     */
+    var VIEWS = [
+      { key: "chart", label: "排盘", path: "ziwei/chart", title: "紫微斗数排盘" },
+      { key: "heming", label: "合盘", path: "ziwei/heming", title: "紫微斗数合盘" },
+      { key: "library", label: "古籍", path: "ziwei/library", title: "紫微斗数古籍库" },
+      { key: "knowledge", label: "百科", path: "ziwei/knowledge", title: "紫微斗数百科" },
+    ];
+
     /** 读宿主（DSH 外壳）当前配色：外壳用 color-scheme 表达浅色/深色。 */
     function hostTheme() {
       try {
@@ -128,16 +139,42 @@ window.__ModuleLoader__.load({
       var [sent, setSent] = react.useState(false);
       var [copied, setCopied] = react.useState(false);
 
-      // 内嵌页面直接落在排盘页（少一次点击），新窗口入口仍回应用首页。
-      var src = react.useMemo(function () {
+      // 当前在看哪一页：排盘 / 合盘 / 古籍 / 百科。默认落排盘页。
+      var [view, setView] = react.useState("chart");
+
+      function viewUrl(key) {
+        var item = null;
+        for (var i = 0; i < VIEWS.length; i += 1) {
+          if (VIEWS[i].key === key) item = VIEWS[i];
+        }
+        if (!item) item = VIEWS[0];
         try {
-          var target = new URL("ziwei/chart", document.baseURI);
+          var target = new URL(item.path, document.baseURI);
           target.searchParams.set("theme", hostTheme());
           return target.href;
         } catch (error) {
-          return "/ziwei/chart?theme=light";
+          return "/" + item.path + "?theme=light";
         }
-      }, []);
+      }
+
+      // 只跟着 view 走；主题变化通过 postMessage 推，避免每次渲染重载 iframe。
+      var src = react.useMemo(function () {
+        return viewUrl(view);
+      }, [view]);
+      var viewTitle = react.useMemo(function () {
+        for (var i = 0; i < VIEWS.length; i += 1) {
+          if (VIEWS[i].key === view) return VIEWS[i].title;
+        }
+        return VIEWS[0].title;
+      }, [view]);
+
+      function switchView(key) {
+        if (key === view) return;
+        setView(key);
+        setLoaded(false);
+        setSent(false);
+      }
+
       var homeHref = react.useMemo(function () {
         try {
           return new URL("ziwei/", document.baseURI).href;
@@ -348,6 +385,46 @@ window.__ModuleLoader__.load({
             },
           },
           h("span", { style: { fontSize: 14, fontWeight: 600 } }, "紫微斗数"),
+          // 二级入口：排盘 / 合盘 / 古籍 / 百科（同一个应用的不同路由）
+          h(
+            "div",
+            {
+              "data-dsh-ziwei-tabs": "",
+              style: {
+                display: "flex",
+                gap: 2,
+                padding: 2,
+                borderRadius: 8,
+                border: "1px solid " + COLORS.border,
+              },
+            },
+            VIEWS.map(function (item) {
+              var active = item.key === view;
+              return h(
+                "button",
+                {
+                  key: item.key,
+                  type: "button",
+                  "data-dsh-ziwei-tab": item.key,
+                  "aria-pressed": active,
+                  onClick: function () {
+                    switchView(item.key);
+                  },
+                  style: {
+                    padding: "3px 10px",
+                    borderRadius: 6,
+                    border: 0,
+                    cursor: active ? "default" : "pointer",
+                    font: "inherit",
+                    fontSize: 12,
+                    background: active ? COLORS.chip : "transparent",
+                    color: active ? "inherit" : COLORS.muted,
+                  },
+                },
+                item.label,
+              );
+            }),
+          ),
           h(
             "span",
             { style: { fontSize: 12, color: COLORS.muted } },
@@ -403,7 +480,8 @@ window.__ModuleLoader__.load({
         h("iframe", {
           ref: iframeRef,
           src: src,
-          title: "紫微斗数排盘",
+          title: viewTitle,
+          "data-dsh-ziwei-frame": view,
           onLoad: function () {
             setLoaded(true);
             // basePath 重定向偶尔会丢 query，加载完成后再补一次主题同步。

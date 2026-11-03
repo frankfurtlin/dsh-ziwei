@@ -327,6 +327,107 @@ try {
       `len=${followed.length}`,
     )
     await page.screenshot({ path: path.join(outDir, '05-panel-reading.png') })
+
+    // ── 6. 命盘总览抽屉（原来闲置的 ChartSummary 接回来了）──
+    await frame.locator('[data-ziwei-brief-toggle]').click()
+    const briefBody = frame.locator('[data-ziwei-brief-body]')
+    await briefBody.waitFor({ state: 'visible', timeout: 15000 })
+    const briefText = await briefBody.innerText()
+    check(
+      '命盘概览抽屉展开后有命格总览与格局识别',
+      /命格总览/.test(briefText) && /格局识别/.test(briefText) && /本命四化/.test(briefText),
+      `len=${briefText.length}`,
+    )
+    await page.screenshot({ path: path.join(outDir, '06-brief.png') })
+    await frame.locator('[data-ziwei-brief-toggle]').click()
+    await briefBody.waitFor({ state: 'detached', timeout: 10000 }).catch(() => {})
+    check('再点一次能收起命盘概览', (await frame.locator('[data-ziwei-brief-body]').count()) === 0)
+
+    // ── 7. 点星看解释（StarDetailPanel 接回来了）──
+    await frame.locator('[data-ziwei-star]').first().click({ timeout: 15000 })
+    const starPanel = frame.locator('[data-ziwei-star-detail]')
+    await starPanel.waitFor({ state: 'visible', timeout: 15000 })
+    const starText = await starPanel.innerText()
+    check('点星曜弹出星曜详情（古籍 + 倪师解读）', starText.length > 120 && /(倪师|古诀)/.test(starText), `len=${starText.length}`)
+    await page.screenshot({ path: path.join(outDir, '07-star-detail.png') })
+    await starPanel.locator('button').first().click({ force: true }).catch(() => {})
+    await starPanel.waitFor({ state: 'detached', timeout: 5000 }).catch(() => {})
+
+    // ── 8. 分享图（ShareModal 接回来了）──
+    await frame.locator('[data-ziwei-share]').click()
+    await frame.locator('text=下载分享图').first().waitFor({ state: 'visible', timeout: 15000 })
+    const shareText = await frame.locator('body').innerText()
+    check(
+      '分享命盘弹层能打开并渲染分享卡',
+      /下载分享图/.test(shareText) && /复制命盘链接/.test(shareText) && /倪海厦正宗/.test(shareText),
+      `card=${/倪海厦正宗/.test(shareText)}`,
+    )
+    const shareUrlAttr = (await frame.locator('[data-ziwei-share]').getAttribute('data-ziwei-share-url')) || ''
+    check('分享链接里带着生辰参数', /b=1990-6-15-5/.test(shareUrlAttr), shareUrlAttr.slice(0, 90))
+    // 分享图由 html2canvas 现场生成并触发下载，这里真实点一次，等浏览器下载事件
+    let shareDialog = ''
+    page.on('dialog', async (dialog) => {
+      shareDialog = dialog.message()
+      await dialog.dismiss().catch(() => {})
+    })
+    const downloadPromise = page.waitForEvent('download', { timeout: 30000 }).catch(() => null)
+    await frame.locator('button:has-text("下载分享图")').click().catch(() => {})
+    const shareDownload = await downloadPromise
+    check(
+      '能生成并下载分享图',
+      !!shareDownload && /紫微命盘/.test(shareDownload.suggestedFilename()),
+      shareDownload ? shareDownload.suggestedFilename() : shareDialog || '没有触发下载',
+    )
+    await page.screenshot({ path: path.join(outDir, '08-share.png') })
+    await frame.locator('button:has-text("×")').first().click({ force: true }).catch(() => {})
+
+    // ── 9. 分享链接回放：另开一个页面直接还原同一张盘 ──
+    const sharedPage = await context.newPage()
+    try {
+      await sharedPage.goto(new URL('ziwei/chart?b=1985-3-20-7&g=m', url).href, {
+        waitUntil: 'domcontentloaded',
+        timeout: 60000,
+      })
+      await sharedPage.locator('[data-ziwei-brief]').waitFor({ state: 'visible', timeout: 40000 })
+      const sharedBody = await sharedPage.locator('body').innerText()
+      await sharedPage.locator('[data-ziwei-brief-toggle]').click()
+      const sharedBrief = await sharedPage
+        .locator('[data-ziwei-brief-body]')
+        .innerText()
+        .catch(() => '')
+      check(
+        '分享链接能直接还原同一张命盘（1985-3-20）',
+        /正在查看分享链接里的命盘/.test(sharedBody) && /1985/.test(sharedBrief),
+        `brief=${sharedBrief.replace(/\s+/g, ' ').slice(0, 40)}`,
+      )
+    } finally {
+      await sharedPage.close().catch(() => {})
+    }
+
+    // ── 10. 面板二级入口：合盘 / 古籍 / 百科 / 回到排盘 ──
+    const currentFrameUrl = () => page.frames().find((item) => item.url().includes('/ziwei/'))?.url() ?? ''
+    async function switchPanelView(key, expectedPath) {
+      await page.locator(`button[data-dsh-ziwei-tab="${key}"]`).click({ force: true })
+      const deadline = Date.now() + 20000
+      while (Date.now() < deadline) {
+        const href = currentFrameUrl()
+        if (href.includes(expectedPath)) return href
+        await page.waitForTimeout(250)
+      }
+      return currentFrameUrl()
+    }
+    const hemingUrl = await switchPanelView('heming', '/ziwei/heming')
+    check('面板能切到「合盘」', hemingUrl.includes('/ziwei/heming'), hemingUrl)
+    const libraryUrl = await switchPanelView('library', '/ziwei/library')
+    check('面板能切到「古籍」', libraryUrl.includes('/ziwei/library'), libraryUrl)
+    const knowledgeUrl = await switchPanelView('knowledge', '/ziwei/knowledge')
+    check('面板能切到「百科」', knowledgeUrl.includes('/ziwei/knowledge'), knowledgeUrl)
+    const innerPage = page.frames().find((item) => item.url().includes('/ziwei/'))
+    const knowledgeText = await innerPage?.locator('body').innerText().catch(() => '')
+    check('百科页在内嵌环境里渲染出内容', (knowledgeText || '').length > 200, `len=${(knowledgeText || '').length}`)
+    await page.screenshot({ path: path.join(outDir, '09-panel-knowledge.png') })
+    const backUrl = await switchPanelView('chart', '/ziwei/chart')
+    check('能切回「排盘」', backUrl.includes('/ziwei/chart'), backUrl)
   }
 
   // ── 5. 「让 DSH 解读」→ 新开会话 + 盘面 prompt 进输入框（--ask 才跑）──
