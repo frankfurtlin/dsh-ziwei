@@ -81,6 +81,34 @@ export async function loadSavedBirth(): Promise<StoredBirth | null> {
   }
 }
 
+/** 读最近用过的几个生辰（新的在前，最多 5 条）；接口不可用时返回空数组。 */
+export async function listRecentBirths(limit = 5): Promise<StoredBirth[]> {
+  try {
+    const response = await fetch(ENDPOINT, {
+      headers: { accept: 'application/json' },
+      cache: 'no-store',
+      credentials: 'same-origin',
+    });
+    if (!response.ok) return [];
+    const payload = (await response.json()) as { current?: unknown; history?: unknown };
+    const seen = new Set<string>();
+    const records: StoredBirth[] = [];
+    for (const raw of [payload?.current, ...(Array.isArray(payload?.history) ? payload.history : [])]) {
+      const record = normalize(raw);
+      if (!record) continue;
+      // 同一个人同一天只留一条（历史里可能因为重复起盘出现多次）
+      const key = `${record.info.year}-${record.info.month}-${record.info.day}-${record.info.hour}-${record.info.gender}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      records.push(record);
+      if (records.length >= limit) break;
+    }
+    return records;
+  } catch {
+    return [];
+  }
+}
+
 /** 记一条生辰（写配置文件，同时把刚存的记录返回给 UI 用）。 */
 export async function saveBirth(
   info: BirthInfo,

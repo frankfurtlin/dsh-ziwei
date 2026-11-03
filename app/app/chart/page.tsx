@@ -10,12 +10,12 @@ import StarDetailPanel from '@/components/StarDetailPanel';
 import { generateChart } from '@/lib/ziwei/algorithm';
 import { digestChart } from '@/lib/ziwei/digest';
 import { detectPatterns, getMingGongSummary } from '@/lib/ziwei/patterns';
-import { clearSavedBirth, loadSavedBirth, saveBirth } from '@/lib/birth-storage';
+import { clearSavedBirth, listRecentBirths, loadSavedBirth, saveBirth } from '@/lib/birth-storage';
 import type { StoredBirth } from '@/lib/birth-storage';
 import type { BirthInfo, ZiweiChart, Palace, Star } from '@/lib/ziwei/types';
 
 /**
- * 命盘页 —— 开源版「排盘引擎 Demo」
+ * 命盘页 —— 插件的主界面
  *
  * 用本仓库的排盘引擎 generateChart() 渲染一张完整紫微命盘，并支持本命 / 大限 /
  * 流年切换、命盘总览（命格 · 四化 · 格局）、点星看解释、分享图。
@@ -56,6 +56,16 @@ function readSharedBirth(): BirthInfo | null {
   return info;
 }
 
+const HOUR_LABELS = ['子时', '丑时', '寅时', '卯时', '辰时', '巳时', '午时', '未时', '申时', '酉时', '戌时', '亥时'];
+
+/** 一行一个生辰：「1990-06-15 · 巳时 · 男 · 张三」 */
+function birthLabel(info: BirthInfo): string {
+  const date = `${info.year}-${String(info.month).padStart(2, '0')}-${String(info.day).padStart(2, '0')}`;
+  const hour = HOUR_LABELS[info.hour] ?? `${info.hour} 时辰`;
+  const gender = info.gender === 'female' ? '女' : '男';
+  return `${date} · ${hour} · ${gender}${info.name ? ` · ${info.name}` : ''}`;
+}
+
 export default function ChartPage() {
   const [chart, setChart] = useState<ZiweiChart | null>(null);
   const [selectedPalace, setSelectedPalace] = useState<Palace | null>(null);
@@ -69,6 +79,10 @@ export default function ChartPage() {
   const [briefOpen, setBriefOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [starDetail, setStarDetail] = useState<{ star: Star; palaceName?: string } | null>(null);
+  // 服务端记着的最近几个生辰（复用起来不用重填）
+  const [recent, setRecent] = useState<StoredBirth[]>([]);
+  const [recentOpen, setRecentOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const formSnapshotRef = useRef<Record<string, unknown> | undefined>(undefined);
 
   // ── 宿主（DSH 插件面板）会量出宠物浮层的遮挡区域发过来 ──
@@ -106,6 +120,14 @@ export default function ChartPage() {
     };
   }, []);
 
+  // ── 最近用过的生辰（存在宿主配置里，换浏览器也在）──
+  const refreshRecent = () => {
+    void listRecentBirths(5).then(setRecent);
+  };
+  useEffect(() => {
+    refreshRecent();
+  }, []);
+
   const handleSubmit = (info: BirthInfo) => {
     const form = formSnapshotRef.current;
     setSubmitted(true);
@@ -116,13 +138,42 @@ export default function ChartPage() {
     // 写配置文件（失败不影响这次排盘，只是下次不自动恢复）
     void saveBirth(info, form).then((stored) => {
       if (stored) setSaved(stored);
+      refreshRecent();
     });
   };
 
   const handleForget = () => {
     setSaved(null);
     setRestored(false);
+    setRecent([]);
     void clearSavedBirth();
+  };
+
+  /** 用一条已有生辰直接起盘（最近列表点选时用） */
+  const applyBirth = (info: BirthInfo) => {
+    setSubmitted(true);
+    setRestored(false);
+    setShared(false);
+    setSelectedPalace(null);
+    setStarDetail(null);
+    setRecentOpen(false);
+    setChart(generateChart(info));
+    void saveBirth(info).then((stored) => {
+      if (stored) setSaved(stored);
+      refreshRecent();
+    });
+  };
+
+  /** 把当前盘面摘要复制到剪贴板，方便直接贴进 DSH 会话 */
+  const handleCopyDigest = async () => {
+    if (!chart) return;
+    try {
+      await navigator.clipboard.writeText(digestChart(chart));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      /* 剪贴板不可用就静默失败，面板上的「让 DSH 解读」仍然可用 */
+    }
   };
 
   // ── 顶部概览条上的三个数字：命宫主星 / 五行局 / 格局数 ──
@@ -176,8 +227,28 @@ export default function ChartPage() {
       >
         <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>紫微斗数排盘</h1>
         <p style={{ color: 'var(--t-text2)', marginBottom: 32, fontSize: 14, lineHeight: 1.7 }}>
-          输入出生年月日时，开源排盘引擎即时生成命盘。
+          输入出生年月日时，本机排盘引擎即时生成命盘。
         </p>
+        {recent.length > 0 && (
+          <div data-ziwei-recent-form style={{ marginTop: 0, marginBottom: 18, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: 12, color: 'var(--t-faint)' }}>最近用过：</span>
+            {recent.slice(0, 4).map((item) => (
+              <button
+                key={`${item.info.year}-${item.info.month}-${item.info.day}-${item.info.hour}-${item.info.gender}`}
+                type="button"
+                data-ziwei-recent-item
+                onClick={() => applyBirth(item.info)}
+                style={{
+                  padding: '5px 10px', cursor: 'pointer', fontSize: 12, font: 'inherit',
+                  border: '1px solid var(--t-border)', borderRadius: 999, background: 'var(--t-surface)',
+                  color: 'var(--t-text1)',
+                }}
+              >
+                {birthLabel(item.info)}
+              </button>
+            ))}
+          </div>
+        )}
         <BirthForm
           onSubmit={handleSubmit}
           initialData={saved?.form as Partial<BirthFormState> | undefined}
@@ -249,6 +320,47 @@ export default function ChartPage() {
         </button>
         <button type="button" data-ziwei-share data-ziwei-share-url={shareUrl} onClick={() => setShareOpen(true)} style={toolbarButtonStyle}>
           分享命盘
+        </button>
+        {recent.length > 0 && (
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              data-ziwei-recent
+              aria-expanded={recentOpen}
+              onClick={() => setRecentOpen((open) => !open)}
+              style={toolbarButtonStyle}
+            >
+              最近生辰 ▾
+            </button>
+            {recentOpen && (
+              <div
+                data-ziwei-recent-list
+                style={{
+                  position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 40, minWidth: 250,
+                  background: 'var(--t-card)', border: '1px solid var(--t-border)', borderRadius: 10,
+                  boxShadow: '0 12px 32px rgba(13,13,11,0.16)', padding: 6,
+                }}
+              >
+                {recent.map((item) => (
+                  <button
+                    key={`${item.info.year}-${item.info.month}-${item.info.day}-${item.info.hour}-${item.info.gender}`}
+                    type="button"
+                    onClick={() => applyBirth(item.info)}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px',
+                      border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 8,
+                      color: 'var(--t-text1)', font: 'inherit', fontSize: 13,
+                    }}
+                  >
+                    {birthLabel(item.info)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        <button type="button" data-ziwei-copy onClick={() => void handleCopyDigest()} style={toolbarButtonStyle}>
+          {copied ? '已复制 ✓' : '复制盘面摘要'}
         </button>
         {shared && <span style={{ fontSize: 12, color: 'var(--t-faint)' }}>正在查看分享链接里的命盘</span>}
         {restored && saved && (
