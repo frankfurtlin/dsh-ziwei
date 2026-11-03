@@ -151,6 +151,29 @@
 本文件（演进与踩坑）。同时把 README 里指向旧路径 `/root/workspace/ziwei-doushu` 的说法、
 `restart-and-verify.sh` 里的 test-persistence 路径、502 文案里的 systemd 单元名一并修正。
 
+## 11. 修「百科点进去 404」
+
+用户反馈：面板「百科」里点任意一张星曜卡片，进去是 404。
+
+根因不在我们这几轮的改动，而在开源版的设定：`app/lib/ziwei/db-analysis.ts` 是占位文件，
+`STAR_DB`（14 主星 × 13 宫位的逐宫论断内容库）置空，于是
+`getAllKnowledgeRoutes()` 返回 **0 条**；而 `app/knowledge/[star]/[topic]/page.tsx` 顶上写着
+`export const dynamicParams = false`，配合 `if (!data.exists) notFound()`，
+结果是 14×13 = 182 个详情 URL 全部 404 —— 列表页有卡片、点进去必死。
+
+改法（不改数据、不编内容）：
+
+- `dynamicParams = false` → `true`：允许运行时渲染这些参数；
+- `if (!data.exists) notFound()` → 改为渲染一页说明：「这一版是开源排盘引擎，安星/四化/格局/古籍原典都开放，
+  但逐宫论断内容库不在开源范围，所以这一页没有正文」，并给出两个替代入口（古籍原典库、起盘后让 DSH 的模型解读）；
+- 缺内容时 `generateMetadata` 返回正经标题并标 `robots: noindex, nofollow`，空壳页不进搜索引擎；
+  正文为空时也不再输出空的 JSON-LD `Article`；
+- 顺带修掉「命宫宫」：`TOPIC_PALACE_NAME` 里命宫自带「宫」字，其他是「夫妻」「官禄」，
+  统一用 `withPalace()` 补一次，标题/面包屑/内链都不再重复。
+
+自测：面板 → 百科 → 点卡片 → 详情页 200、显示说明与替代入口 → 面包屑回列表，10/10 通过；
+`/ziwei/knowledge/{ziwei/overview,tianji/love,pojun/career}` 全部 200。
+
 ---
 
 ## 提交记录
@@ -161,6 +184,8 @@
 c00ce95 feat(panel): 增加排盘/合盘/古籍/百科四个二级入口
 30e4762 test(verify): 补上概览/点星/分享/视图切换的验收断言
 5b2b83f feat(app): 把排盘应用收进插件仓库（app/）
+a01c47f docs: 补齐插件文档（架构/接口/能力地图/部署/变更记录）
+c61500d fix(host): 502 文案与验收脚本指向搬移后的应用
 ```
 
 约定见 README「提交约定」：Conventional Commits + 中文摘要，一次提交只做一件事。
