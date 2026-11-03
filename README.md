@@ -194,3 +194,12 @@ sudo systemd-run --on-active=10s --unit=dsh-ziwei-verify \
 - 「让 DSH 解读」要求至少有一个 Workspace；全新 DSH_HOME 会先由
   `workspaces.initializeDefault()` 建默认工作区再开会话。
 - 草稿插入依赖浏览器 `execCommand`，失败时退化为「剪贴板 + 用户手动粘贴」。
+
+## 提交约定
+
+沿用 [Conventional Commits](https://www.conventionalcommits.org/)：`<type>(<scope>): <中文摘要>`。
+
+- `type`：`feat`（新功能）/ `fix`（修 bug）/ `docs` / `test` / `build` / `chore` / `refactor`
+- `scope`：受影响的部分，如 `host`、`client`、`panel`、`ai`、`layout`、`verify`
+- 摘要用祈使句、不加句号，控制在 50 字内；正文说明「为什么」和影响面
+- 一次提交只做一件事；改完必须跑过 `npm run check`（或等价）与对应的验收脚本
