@@ -1,12 +1,26 @@
 # dsh-ziwei · 紫微斗数（DSH 插件）
 
-把本地跑的 [紫微斗数排盘](https://github.com/)（`/root/workspace/ziwei-doushu`）装进 DSH：
-侧栏「插件」组里，**Automation tasks** 下面多一行 **紫微斗数**，点开就是排盘主页面，
-不用再走公网域名；盘面可以直接交给 DSH 的 Agent 解读。
+把一个紫微斗数排盘应用装进 DSH：侧栏「插件」组里，**Automation tasks** 下面多一行
+**紫微斗数**，点开就是排盘主页面，不用再走公网域名；盘面可以直接交给 DSH 的 Agent 解读。
+
+排盘应用（原来的独立站点 `workspace/ziwei-doushu`）已经整体收进本仓库的 `app/`，
+现在只有这一个插件版本，独立部署的那份不再存在。
 
 - 侧栏顺序：Automation tasks(10) → **紫微斗数(20)** → Skill Center(30)
 - 公网入口（`hermes.frankfurtlin.top/ziwei/`）已于 2026-11-03 撤掉，现在只能通过 DSH 登录态访问
 - 插件目录：`/root/workspace/plugins/dsh-ziwei`，注册在 `/root/.dsh/profiles/web/package.json`
+- 应用目录：本仓库 `app/`，由 `dsh-ziwei-app.service` 跑在 `127.0.0.1:8815`
+
+## 文档
+
+| 文档 | 内容 |
+| --- | --- |
+| [docs/README.md](docs/README.md) | 文档索引、30 秒速览、改代码前必看的三条 |
+| [docs/architecture.md](docs/architecture.md) | 两层结构、请求链路与鉴权、三个入口分工、数据落盘、面板座位与 `postMessage` 协议 |
+| [docs/api.md](docs/api.md) | `/ziwei/ai`（SSE 协议、限制、错误码）与 `/ziwei/birth`（配置读写）的完整接口 |
+| [docs/app-map.md](docs/app-map.md) | 应用能力地图：路由、排盘页五段结构、布局约束、组件与内核模块清单、主题 token、回归测试 |
+| [docs/deploy.md](docs/deploy.md) | 服务单元、注册方式、改什么重启什么、构建、验收命令、测试实例、回滚、故障排查 |
+| [docs/changelog.md](docs/changelog.md) | 从独立站点到插件的演进与踩过的坑 |
 
 ## 它由哪几块组成
 
@@ -214,8 +228,11 @@ sudo systemd-run --on-active=10s --unit=dsh-ziwei-verify \
 
 ## 依赖
 
-- 排盘应用本身：`/root/workspace/ziwei-doushu`，`ziwei-doushu.service`，监听 `127.0.0.1:8815`，
+- 排盘应用本身：**本仓库 `app/`**（原 `workspace/ziwei-doushu`，已整体搬入并删除旧目录），
+  `dsh-ziwei-app.service`，监听 `127.0.0.1:8815`，
   `NEXT_PUBLIC_BASE_PATH=/ziwei`、`next.config.js` 里 `basePath: '/ziwei'`。
+- `app/` 的依赖用 npm 装（`next ^16.3.8`、`react ^19.2.5`、`iztro`、`lunar-javascript`、
+  `framer-motion`、`html2canvas` 等），`node_modules` 不入库。
 - playwright（只验收用）：复用 `/root/workspace/hermes-site/tools/node_modules`，
   浏览器在 `/root/.cache/ms-playwright`。
 

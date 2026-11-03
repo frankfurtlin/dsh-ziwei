@@ -1,3 +1,8 @@
+> **本目录是 dsh-ziwei 插件的内嵌应用。** 它原来是独立站点（`workspace/ziwei-doushu`），
+> 现在只以本仓库 `app/` 的形式存在，由 `dsh-ziwei-app.service` 跑在 `127.0.0.1:8815`，
+> 通过插件反代从 DSH 侧栏访问（不走公网）。以下是这个开源排盘项目自己的 README；
+> 插件层的结构、接口、部署与验收见 [../docs/README.md](../docs/README.md)。
+
 <div align="center">
 
 # 紫微斗数 · 开源排盘引擎
