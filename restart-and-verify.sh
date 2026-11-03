@@ -50,8 +50,9 @@ STATUS=$?
 # 生辰记忆（服务端配置文件）回归：写入 `~/.dsh/ziwei/birth.json`
 TOKEN=$(printf '%s' "$URL" | sed -n 's/.*[?&]token=\([A-Za-z0-9_-]*\).*/\1/p')
 if [ -n "$TOKEN" ]; then
-  "$NODE" /root/workspace/ziwei-doushu/test-persistence.mjs \
-    --url "${URL%%\?*}/ziwei/chart" --token "$TOKEN" --shots "$OUT_DIR/persistence"
+  APP_URL="$(printf '%s' "${URL%%\?*}" | sed 's:/*$::')/ziwei/chart"
+  "$NODE" "$PLUGIN_DIR/app/test-persistence.mjs" \
+    --url "$APP_URL" --token "$TOKEN" --shots "$OUT_DIR/persistence"
   PERSIST=$?
   echo "[$(date '+%F %T')] 生辰记忆回归 exit=$PERSIST"
   [ "$PERSIST" -ne 0 ] && STATUS=1
