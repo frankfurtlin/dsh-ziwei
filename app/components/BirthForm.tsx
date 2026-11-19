@@ -27,6 +27,8 @@ interface BirthFormProps {
   onFormSave?: (data: BirthFormState) => void;
   /** 隐藏内部「立即起盘」按钮（合盘等场景由父级统一触发） */
   hideSubmit?: boolean;
+  /** 自定义提交按钮文案（编辑已有生辰时用「保存修改」） */
+  submitLabel?: string;
 }
 
 const SHICHEN_NAMES = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
@@ -47,7 +49,7 @@ function isValidDate(y: number, m: number, d: number): boolean {
   return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
 }
 
-export default function BirthForm({ onSubmit, loading, initialData, onFormSave, hideSubmit }: BirthFormProps) {
+export default function BirthForm({ onSubmit, loading, initialData, onFormSave, hideSubmit, submitLabel }: BirthFormProps) {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
 
@@ -149,29 +151,27 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
   };
 
   // ─── 样式变量 ────────────────────────────────────────────
-  const bg = isDark ? 'rgba(8,16,40,0.85)' : 'rgba(255,255,255,0.92)';
-  const border = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(200,160,60,0.2)';
-  // 暗色模式标签提亮：从 rgba(74,112,144,1) → rgba(180,200,225,0.9)
-  const labelClr = isDark ? 'rgba(180,200,225,0.9)' : 'rgba(120,80,10,0.55)';
-  const inputBg = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,252,240,0.8)';
-  const inputBorder = isDark ? 'rgba(255,255,255,0.18)' : 'rgba(200,160,60,0.25)';
-  // 输入文字提亮：从 #c8d8f0 → #e8eef8
-  const inputClr = isDark ? '#e8eef8' : '#2a1a00';
-  const focusBorder = isDark ? 'rgba(212,168,67,0.5)' : 'rgba(180,120,20,0.5)';
-  const errorClr = isDark ? '#f87171' : '#dc2626';
-  const panelBg = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,250,235,0.7)';
-  const panelBorder = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(200,160,60,0.2)';
-  const goldText = isDark ? '#d4a843' : '#7a5008';
-  const summaryBg = isDark ? 'rgba(37,99,235,0.12)' : 'rgba(37,99,235,0.07)';
-  const summaryBorder = isDark ? 'rgba(37,99,235,0.35)' : 'rgba(37,99,235,0.25)';
-  const summaryClr = isDark ? 'rgba(147,197,253,0.9)' : 'rgba(37,99,235,0.85)';
+  const bg = 'var(--t-card)';
+  const border = 'var(--zw-line)';
+  const labelClr = 'var(--zw-ink-3)';
+  const inputBg = 'var(--t-surface)';
+  const inputBorder = 'var(--zw-line)';
+  const inputClr = 'var(--zw-ink)';
+  const focusBorder = 'var(--zw-gold)';
+  const errorClr = 'var(--zw-danger)';
+  const panelBg = 'var(--t-surface)';
+  const panelBorder = 'var(--zw-line)';
+  const goldText = 'var(--zw-ink)';
+  const summaryBg = 'var(--zw-gold-bg)';
+  const summaryBorder = 'var(--zw-gold-line)';
+  const summaryClr = 'var(--zw-gold)';
 
   const inputStyle = {
     background: inputBg,
     border: `1px solid ${inputBorder}`,
     color: inputClr,
-    borderRadius: '14px',
-    padding: '10px 14px',
+    borderRadius: '9px',
+    padding: '9px 11px',
     fontSize: '13px',
     width: '100%',
     outline: 'none',
@@ -206,33 +206,36 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      style={{ background: bg, border: `1px solid ${border}`, borderRadius: '24px', padding: '28px', backdropFilter: 'blur(20px)' }}
+      className="zw-form-card"
+      style={{ background: bg, border: `1px solid ${border}`, borderRadius: '16px', padding: '24px' }}
     >
-      {/* 标题 */}
-      <h3 style={{ color: goldText, fontSize: '12px', letterSpacing: '0.4em', textAlign: 'center', marginBottom: '20px', fontWeight: 500 }}>
-        ── 输入生辰八字 ──
-      </h3>
+      {/* 标题：发丝线 + 衬线标题，不再用一排装饰线 */}
+      <div style={{ marginBottom: '18px' }}>
+        <div className="zw-form-kicker">BIRTH DATA</div>
+        <h3 className="zw-form-title">出生信息</h3>
+      </div>
 
       {/* ── 进度条 ── */}
       <div style={{ display: 'flex', gap: '4px', marginBottom: '20px' }}>
         {steps.map((done, i) => (
           <motion.div
             key={i}
-            animate={{ background: done ? (isDark ? '#d4a843' : '#b07820') : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(200,160,60,0.15)') }}
+            animate={{ background: done ? 'var(--zw-gold)' : 'var(--zw-line)' }}
             transition={{ duration: 0.3 }}
-            style={{ flex: 1, height: '2px', borderRadius: '2px' }}
+            style={{ flex: 1, height: '2px', borderRadius: '2px', opacity: done ? 1 : 0.6 }}
           />
         ))}
       </div>
 
       {/* ── 姓名 ── */}
       <div style={{ marginBottom: '16px' }}>
-        <label style={{ display: 'block', fontSize: '11px', color: labelClr, marginBottom: '6px', letterSpacing: '0.05em' }}>姓名（可选）</label>
+        <label className="zw-field-label">姓名（可选）</label>
         <input
           type="text"
           placeholder="请输入姓名"
           value={form.name}
           onChange={e => setForm({ ...form, name: e.target.value })}
+          className="zw-input"
           style={inputStyle}
           onFocus={e => { e.target.style.borderColor = focusBorder; }}
           onBlur={e => { e.target.style.borderColor = inputBorder; }}
@@ -241,10 +244,11 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
 
       {/* ── 出生日期 ── */}
       <div style={{ marginBottom: '16px' }}>
-        <label style={{ display: 'block', fontSize: '11px', color: labelClr, marginBottom: '6px', letterSpacing: '0.05em' }}>出生日期（公历）</label>
+        <label className="zw-field-label">出生日期（公历）</label>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
           <div>
             <select
+              className="zw-input zw-select"
               value={form.year}
               onChange={e => { setForm({ ...form, year: e.target.value }); setTouched(t => ({ ...t, year: true })); }}
               style={showErr('year') && errors.year ? errorInputStyle : inputStyle}
@@ -259,6 +263,7 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
           </div>
           <div>
             <select
+              className="zw-input zw-select"
               value={form.month}
               onChange={e => { setForm({ ...form, month: e.target.value }); setTouched(t => ({ ...t, month: true })); }}
               style={showErr('month') && errors.month ? errorInputStyle : inputStyle}
@@ -273,6 +278,7 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
           </div>
           <div>
             <select
+              className="zw-input zw-select"
               value={form.day}
               onChange={e => { setForm({ ...form, day: e.target.value }); setTouched(t => ({ ...t, day: true })); }}
               style={showErr('day') && errors.day ? errorInputStyle : inputStyle}
@@ -290,9 +296,10 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
 
       {/* ── 出生地点 ── */}
       <div style={{ marginBottom: '16px' }}>
-        <label style={{ display: 'block', fontSize: '11px', color: labelClr, marginBottom: '6px', letterSpacing: '0.05em' }}>出生地点（用于真太阳时校正）</label>
+        <label className="zw-field-label">出生地点（用于真太阳时校正）</label>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
           <select
+            className="zw-input zw-select"
             value={form.province}
             onChange={e => handleProvince(e.target.value)}
             style={inputStyle}
@@ -305,6 +312,7 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
             ))}
           </select>
           <select
+            className="zw-input zw-select"
             value={form.city}
             onChange={e => handleCity(e.target.value)}
             disabled={!form.province}
@@ -325,7 +333,7 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              style={{ fontSize: '10px', color: isDark ? 'rgba(180,210,235,0.85)' : 'rgba(100,70,10,0.5)', marginTop: '5px' }}
+              style={{ fontSize: '11px', color: 'var(--zw-ink-3)', marginTop: '6px' }}
             >
               {form.city || '（请选择城市）'} · 经度 {form.longitude.toFixed(1)}°E · 时差 {offsetMin > 0 ? '+' : ''}{offsetMin} 分钟
             </motion.p>
@@ -335,7 +343,7 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              style={{ fontSize: '10px', color: isDark ? 'rgba(165,185,210,0.7)' : 'rgba(140,100,20,0.45)', marginTop: '5px' }}
+              style={{ fontSize: '11px', color: 'var(--zw-ink-3)', marginTop: '6px' }}
             >
               * 本机按倪海厦体系用真太阳时，填出生地可自动校正时辰
             </motion.p>
@@ -345,10 +353,11 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
 
       {/* ── 出生时间 ── */}
       <div style={{ marginBottom: '16px' }}>
-        <label style={{ display: 'block', fontSize: '11px', color: labelClr, marginBottom: '6px', letterSpacing: '0.05em' }}>出生时间（北京时间）</label>
+        <label className="zw-field-label">出生时间（北京时间）</label>
         <div style={{ borderRadius: '14px', padding: '12px', background: panelBg, border: `1px solid ${panelBorder}`, opacity: form.unknownTime ? 0.45 : 1, pointerEvents: form.unknownTime ? 'none' : 'auto', transition: 'opacity 0.2s' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
             <select
+              className="zw-input zw-select"
               value={form.clockHour}
               onChange={e => setForm({ ...form, clockHour: e.target.value })}
               style={inputStyle}
@@ -358,6 +367,7 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
               ))}
             </select>
             <select
+              className="zw-input zw-select"
               value={form.clockMinute}
               onChange={e => setForm({ ...form, clockMinute: e.target.value })}
               style={inputStyle}
@@ -369,12 +379,12 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
           </div>
           {/* 真太阳时结果 */}
           <div style={{ textAlign: 'center', padding: '4px 0' }}>
-            <span style={{ fontSize: '10px', color: isDark ? 'rgba(170,195,220,0.75)' : 'rgba(140,100,20,0.5)' }}>真太阳时 → </span>
+            <span style={{ fontSize: '11px', color: 'var(--zw-ink-3)' }}>真太阳时 → </span>
             <span style={{ fontSize: '15px', color: goldText, fontWeight: 600, letterSpacing: '0.08em' }}>
               {SHICHEN_NAMES[branch]}时
             </span>
             {shichenInfo && (
-              <span style={{ fontSize: '10px', color: isDark ? 'rgba(170,195,220,0.75)' : 'rgba(140,100,20,0.5)', marginLeft: '4px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--zw-ink-3)', marginLeft: '4px' }}>
                 （{shichenInfo.range}）
               </span>
             )}
@@ -387,7 +397,7 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
             onChange={e => setForm({ ...form, unknownTime: e.target.checked })}
             style={{ width: '14px', height: '14px', borderRadius: '4px', cursor: 'pointer' }}
           />
-          <span style={{ fontSize: '10px', color: isDark ? 'rgba(165,185,210,0.7)' : 'rgba(140,100,20,0.45)' }}>
+          <span style={{ fontSize: '11px', color: 'var(--zw-ink-3)' }}>
             不知道出生时间，以子时（23:00–01:00）起盘
           </span>
         </label>
@@ -395,7 +405,7 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
 
       {/* ── 性别 ── */}
       <div style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', fontSize: '11px', color: labelClr, marginBottom: '6px', letterSpacing: '0.05em' }}>性别</label>
+        <label className="zw-field-label">性别</label>
         <div style={{ display: 'flex', gap: '10px' }}>
           {(['male', 'female'] as const).map(g => {
             const active = form.gender === g;
@@ -405,22 +415,13 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
               <motion.button
                 key={g}
                 type="button"
+                aria-pressed={active}
                 onClick={() => setForm({ ...form, gender: g })}
-                whileTap={{ scale: 0.97 }}
-                style={{
-                  flex: 1,
-                  padding: '11px',
-                  borderRadius: '14px',
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  border: `1px solid ${active ? `rgba(${accent},0.6)` : inputBorder}`,
-                  background: active ? `rgba(${accent},0.08)` : inputBg,
-                  color: active ? `rgba(${accent},0.9)` : (isDark ? 'rgba(190,205,225,0.7)' : 'rgba(100,80,40,0.4)'),
-                  transition: 'all 0.2s',
-                  cursor: 'pointer',
-                }}
+                whileTap={{ scale: 0.98 }}
+                className={`zw-gender${active ? ' is-active' : ''}`}
+                style={{ flex: 1, borderRadius: '9px', fontSize: '13px' }}
               >
-                {isMale ? '♂ 男' : '♀ 女'}
+                {isMale ? '男' : '女'}
               </motion.button>
             );
           })}
@@ -460,24 +461,8 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
         disabled={loading}
         whileHover={loading ? {} : { scale: 1.01 }}
         whileTap={loading ? {} : { scale: 0.98 }}
-        style={{
-          width: '100%',
-          padding: '14px',
-          borderRadius: '16px',
-          fontSize: '13px',
-          fontWeight: 600,
-          letterSpacing: '0.15em',
-          border: 'none',
-          cursor: loading ? 'not-allowed' : 'pointer',
-          background: loading
-            ? (isDark ? 'rgba(212,168,67,0.15)' : 'rgba(180,120,20,0.15)')
-            : (isDark
-              ? 'linear-gradient(135deg, rgba(180,130,40,0.9), rgba(240,200,80,0.9))'
-              : 'linear-gradient(135deg, #9a6210, #c88020)'),
-          color: loading ? (isDark ? 'rgba(212,168,67,0.4)' : 'rgba(120,80,10,0.4)') : (isDark ? '#08080a' : '#fff8e8'),
-          boxShadow: loading ? 'none' : (isDark ? '0 4px 20px rgba(212,168,67,0.2)' : '0 4px 16px rgba(140,100,20,0.25)'),
-          transition: 'all 0.2s',
-        }}
+        className="zw-submit"
+        style={{ cursor: loading ? 'not-allowed' : 'pointer' }}
       >
         {loading ? (
           <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
@@ -488,7 +473,7 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
             />
             紫微起盘中…
           </span>
-        ) : '立即起盘'}
+        ) : (submitLabel || '立即起盘')}
       </motion.button>}
     </motion.form>
   );

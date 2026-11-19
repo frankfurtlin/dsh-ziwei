@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import BirthForm, { type BirthFormState } from '@/components/BirthForm';
 import { formToBirthInfo } from '@/lib/ziwei/share';
@@ -51,6 +51,15 @@ function AiContent({ text, streaming }: { text: string; streaming?: boolean }) {
 
 export default function HemingPage() {
   const router = useRouter();
+  // 嵌在 DSH 面板 iframe 里时，宿主的工具条已经有「合盘」入口，不再叠一层自己的顶栏
+  const [embedded, setEmbedded] = useState(false);
+  useEffect(() => {
+    try {
+      setEmbedded(window.self !== window.top);
+    } catch {
+      setEmbedded(true);
+    }
+  }, []);
   const { theme } = useTheme();
   const isDark = theme === 'dark';
 
@@ -193,7 +202,8 @@ export default function HemingPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-0)' }}>
-      {/* 顶栏 */}
+      {/* 顶栏：嵌在插件面板里时由宿主工具条提供导航，这里不再重复一层 */}
+      {!embedded && (
       <header style={{
         position: 'sticky', top: 0, zIndex: 50,
         background: isDark ? 'rgba(2,8,16,0.88)' : 'rgba(250,245,235,0.92)',
@@ -216,6 +226,7 @@ export default function HemingPage() {
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: '11px', color: 'var(--tx-3)' }}>感情 · 合伙 · 亲子 · 朋友</span>
       </header>
+      )}
 
       {/* 主体 */}
       <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '32px 24px 80px' }}>

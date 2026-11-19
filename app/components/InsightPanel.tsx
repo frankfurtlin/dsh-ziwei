@@ -357,13 +357,32 @@ export default function InsightPanel({
 
       <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '14px 16px' }}>
         {messages.length === 0 && (
-          <p style={{ fontSize: 12, color: 'var(--t-faint)', lineHeight: 1.7 }}>
-            {loading
-              ? reasoningChars > 0
-                ? `模型正在思考这张盘…（已思考 ${reasoningChars} 字）`
-                : '正在按这张盘生成解读…'
-              : '已恢复上次生辰的命盘。点上面的标签，或选中某一宫再分析，即可用 DSH 的模型解读。'}
-          </p>
+          loading ? (
+            <p style={{ fontSize: 12, color: 'var(--zw-ink-3)', lineHeight: 1.7 }}>
+              {reasoningChars > 0 ? `模型正在思考这张盘…（已思考 ${reasoningChars} 字）` : '正在按这张盘生成解读…'}
+            </p>
+          ) : (
+            <div className="zw-insight-empty">
+              <div>
+                <div className="zw-empty-title">
+                  {chart.birthInfo.name ? `${chart.birthInfo.name}的` : ''}这张盘，先看命格
+                </div>
+                <p className="zw-empty-copy">
+                  由 DSH 模型按盘面生成，一次一个主题；追问会延续同一段对话。
+                </p>
+              </div>
+              <button type="button" className="zw-btn zw-btn-primary" onClick={() => void run('', 'overview')}>
+                生成命格总览
+              </button>
+              <div className="zw-samples">
+                {['今年适合换工作吗？', '感情上要注意什么？', '财运的关键点在哪？'].map(sample => (
+                  <button key={sample} type="button" className="zw-chip" onClick={() => void run(sample, topic)}>
+                    {sample}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
         )}
         {messages.map((message, index) =>
           message.role === 'user' ? (
@@ -418,7 +437,7 @@ export default function InsightPanel({
             onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.nativeEvent.isComposing) submit();
             }}
-            placeholder="继续追问，如：今年适合换工作吗？"
+            placeholder="问一句，如：今年适合换工作吗？"
             disabled={loading}
             style={{
               flex: 1,

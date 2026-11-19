@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import BirthForm from '@/components/BirthForm';
 import type { BirthFormState } from '@/components/BirthForm';
+import BirthManager from '@/components/BirthManager';
 import ChartBoard from '@/components/ChartBoard';
 import ChartSummary from '@/components/ChartSummary';
 import InsightPanel from '@/components/InsightPanel';
@@ -14,10 +15,13 @@ import {
   clearAllBirths,
   clearSavedBirth,
   isRealDate,
-  listRecentBirths,
+  listAllBirths,
   loadSavedBirth,
+  removeBirth,
   saveBirth,
+  updateBirth,
 } from '@/lib/birth-storage';
+import { birthLabel } from '@/lib/birth-label';
 import { formToBirthInfo } from '@/lib/ziwei/share';
 import type { StoredBirth } from '@/lib/birth-storage';
 import type { BirthInfo, ZiweiChart, Palace, Star } from '@/lib/ziwei/types';
@@ -65,29 +69,6 @@ function readSharedBirth(): BirthInfo | null {
   return info;
 }
 
-const HOUR_LABELS = ['子时', '丑时', '寅时', '卯时', '辰时', '巳时', '午时', '未时', '申时', '酉时', '戌时', '亥时'];
-
-/**
- * 一行一个生辰：「1990-06-15 23:30 · 子时 · 男 · 上海 · 张三」。
- *
- * 有表单快照时优先用它拼「几点几分 + 出生地」：同一天同一个人早晚子时会被
- * 换算成次日，只看 `info` 会看到日期跳了一天、也不知道是哪个城市校正出来的盘，
- * 列表里几条看起来一模一样，用户没法分辨。
- */
-function birthLabel(record: StoredBirth): string {
-  const { info } = record;
-  const form = (record.form ?? {}) as Partial<BirthFormState>;
-  const date = `${info.year}-${String(info.month).padStart(2, '0')}-${String(info.day).padStart(2, '0')}`;
-  const clock =
-    form.clockHour !== undefined && form.clockHour !== ''
-      ? ` ${String(form.clockHour).padStart(2, '0')}:${String(form.clockMinute ?? '0').padStart(2, '0')}`
-      : '';
-  const hour = HOUR_LABELS[info.hour] ?? `${info.hour} 时辰`;
-  const gender = info.gender === 'female' ? '女' : '男';
-  const city = form.city ? ` · ${form.city}` : '';
-  return `${date}${clock} · ${hour} · ${gender}${city}${info.name ? ` · ${info.name}` : ''}`;
-}
-
 export default function ChartPage() {
   const [chart, setChart] = useState<ZiweiChart | null>(null);
   const [selectedPalace, setSelectedPalace] = useState<Palace | null>(null);
@@ -101,9 +82,14 @@ export default function ChartPage() {
   const [briefOpen, setBriefOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [starDetail, setStarDetail] = useState<{ star: Star; palaceName?: string } | null>(null);
-  // 服务端记着的最近几个生辰（复用起来不用重填）
-  const [recent, setRecent] = useState<StoredBirth[]>([]);
+  // 服务端记着的全部生辰（列表、复用、「生辰管理」共用）
+  const [records, setRecords] = useState<StoredBirth[]>([]);
   const [recentOpen, setRecentOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const birthMenuRef = useRef<HTMLDivElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
+  // 「生辰管理」弹层：列出全部记录，支持单条起盘、编辑、删除
+  const [managerOpen, setManagerOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   // 排盘失败时的可读提示（典型场景：分享链接/历史记录里的日期不存在）
   const [chartError, setChartError] = useState('');
@@ -172,12 +158,12 @@ export default function ChartPage() {
     };
   }, []);
 
-  // ── 最近用过的生辰（存在宿主配置里，换浏览器也在）──
-  const refreshRecent = () => {
-    void listRecentBirths(5).then(setRecent);
+  // ── 全部保存过的生辰（存在宿主配置里，换浏览器也在）──
+  const refreshRecords = () => {
+    void listAllBirths().then(setRecords);
   };
   useEffect(() => {
-    refreshRecent();
+    refreshRecords();
   }, []);
 
   const handleSubmit = (rawInfo: BirthInfo) => {
@@ -195,7 +181,7 @@ export default function ChartPage() {
     // 写配置文件（失败不影响这次排盘，只是下次不自动恢复）
     void saveBirth(info, form as unknown as Record<string, unknown> | undefined).then((stored) => {
       if (stored) setSaved(stored);
-      refreshRecent();
+      refreshRecords();
     });
   };
 
@@ -203,7 +189,7 @@ export default function ChartPage() {
   const handleForget = () => {
     setSaved(null);
     setRestored(false);
-    void clearSavedBirth().then(refreshRecent);
+    void clearSavedBirth().then(refreshRecords);
   };
 
   /** 清空全部生辰记录（连历史一起删，需要用户再确认一次）。 */
@@ -211,14 +197,44 @@ export default function ChartPage() {
     if (!window.confirm('清空全部生辰记录？包括「最近生辰」里的历史，删除后无法恢复。')) return;
     setSaved(null);
     setRestored(false);
-    setRecent([]);
+    setRecords([]);
     setRecentOpen(false);
+    setManagerOpen(false);
     void clearAllBirths();
   };
 
-  /** 用一条已有生辰直接起盘（最近列表点选时用） */
-  const applyBirth = (info: BirthInfo) => {
-    const next = safeChart(info);
+  // 两个下拉打开时：点外面或按 Esc 关闭
+  useEffect(() => {
+    if (!recentOpen && !moreOpen) return;
+    const onDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (birthMenuRef.current?.contains(target) || moreMenuRef.current?.contains(target)) return;
+      setRecentOpen(false);
+      setMoreOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setRecentOpen(false);
+      setMoreOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [recentOpen, moreOpen]);
+
+  /** 打开「生辰管理」：先把列表拉新，避免弹层里是旧数据。 */
+  const openManager = () => {
+    setRecentOpen(false);
+    setManagerOpen(true);
+    refreshRecords();
+  };
+
+  /** 用一条已有生辰直接起盘（最近列表 / 生辰管理点选时用） */
+  const applyStored = (record: StoredBirth) => {
+    const next = safeChart(record.info);
     if (!next) return;
     setSubmitted(true);
     setRestored(false);
@@ -226,11 +242,46 @@ export default function ChartPage() {
     setSelectedPalace(null);
     setStarDetail(null);
     setRecentOpen(false);
+    setManagerOpen(false);
     setChart(next);
-    void saveBirth(info).then((stored) => {
+    void saveBirth(record.info, record.form).then((stored) => {
       if (stored) setSaved(stored);
-      refreshRecent();
+      refreshRecords();
     });
+  };
+
+  /** 编辑一条历史生辰：PATCH 只改这一条；改的是当前命盘时同步刷新画布。 */
+  const handleEditStored = async (
+    record: StoredBirth,
+    info: BirthInfo,
+    form?: BirthFormState,
+  ): Promise<boolean> => {
+    const ok = await updateBirth(record.id, info, form as unknown as Record<string, unknown> | undefined);
+    if (!ok) return false;
+    if (!shared && saved?.id && saved.id === record.id) {
+      const stored = await loadSavedBirth();
+      if (stored) {
+        setSaved(stored);
+        setRestored(false);
+        const next = safeChart(stored.info);
+        if (next) setChart(next);
+      }
+    }
+    refreshRecords();
+    return true;
+  };
+
+  /** 删除一条生辰；删的正是当前命盘时只清「自动恢复」，盘面继续留着。 */
+  const handleDeleteStored = async (record: StoredBirth): Promise<boolean> => {
+    if (!record.id) return false;
+    const ok = await removeBirth(record.id);
+    if (!ok) return false;
+    if (!shared && saved?.id === record.id) {
+      setSaved(null);
+      setRestored(false);
+    }
+    refreshRecords();
+    return true;
   };
 
   /** 把当前盘面摘要复制到剪贴板，方便直接贴进 DSH 会话 */
@@ -282,19 +333,10 @@ export default function ChartPage() {
   // ── 未起盘：展示出生信息表单 ──
   if (!chart) {
     return (
-      <main
-        style={{
-          maxWidth: 720,
-          margin: '0 auto',
-          padding: '40px 20px 56px',
-          minHeight: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          boxSizing: 'border-box',
-        }}
-      >
-        <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>紫微斗数排盘</h1>
+      <main className="zw-form">
+        <h1 style={{ fontFamily: 'var(--zw-serif)', fontSize: 26, fontWeight: 600, letterSpacing: '0.04em', marginBottom: 8 }}>
+          紫微斗数排盘
+        </h1>
         <p style={{ color: 'var(--t-text2)', marginBottom: 32, fontSize: 14, lineHeight: 1.7 }}>
           输入出生年月日时，本机排盘引擎即时生成命盘。
         </p>
@@ -316,15 +358,15 @@ export default function ChartPage() {
             {chartError}
           </p>
         )}
-        {recent.length > 0 && (
-          <div data-ziwei-recent-form style={{ marginTop: 0, marginBottom: 18, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+        {records.length > 0 && (
+          <div data-ziwei-recent-form style={{ marginTop: 0, marginBottom: 12, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
             <span style={{ fontSize: 12, color: 'var(--t-faint)' }}>最近用过：</span>
-            {recent.slice(0, 4).map((item) => (
+            {records.slice(0, 4).map((item) => (
               <button
-                key={`${item.info.year}-${item.info.month}-${item.info.day}-${item.info.hour}-${item.info.gender}`}
+                key={item.id || `${item.info.year}-${item.info.month}-${item.info.day}-${item.info.hour}-${item.info.gender}-${item.info.name ?? ''}`}
                 type="button"
                 data-ziwei-recent-item
-                onClick={() => applyBirth(item.info)}
+                onClick={() => applyStored(item)}
                 style={{
                   padding: '5px 10px', cursor: 'pointer', fontSize: 12, font: 'inherit',
                   border: '1px solid var(--t-border)', borderRadius: 999, background: 'var(--t-surface)',
@@ -335,6 +377,21 @@ export default function ChartPage() {
               </button>
             ))}
           </div>
+        )}
+        {records.length > 0 && (
+          <p style={{ margin: '0 0 16px', fontSize: 12 }}>
+            <button
+              type="button"
+              data-ziwei-manage-form
+              onClick={openManager}
+              style={{
+                border: 'none', background: 'none', padding: 0, cursor: 'pointer',
+                color: 'var(--t-gold)', textDecoration: 'underline', font: 'inherit', fontSize: 12,
+              }}
+            >
+              管理全部生辰（{records.length}）…
+            </button>
+          </p>
         )}
         <BirthForm
           onSubmit={handleSubmit}
@@ -360,38 +417,28 @@ export default function ChartPage() {
             。
           </p>
         )}
+        {managerOpen && (
+          <BirthManager
+            records={records}
+            currentId={saved?.id}
+            onClose={() => setManagerOpen(false)}
+            onApply={applyStored}
+            onEdit={handleEditStored}
+            onDelete={handleDeleteStored}
+            onClearAll={handleClearAll}
+          />
+        )}
       </main>
     );
   }
-
-  const toolbarButtonStyle: React.CSSProperties = {
-    padding: '6px 14px',
-    cursor: 'pointer',
-    border: '1px solid var(--t-border)',
-    borderRadius: 8,
-    background: 'transparent',
-    color: 'var(--t-text1)',
-    font: 'inherit',
-    whiteSpace: 'nowrap',
-  };
 
   // ── 已起盘：命盘 ──
   return (
     <main
       data-pet-insets={`${petInsets.bottom},${petInsets.right}`}
-      style={{
-        maxWidth: 1280,
-        margin: '0 auto',
-        padding: '14px 16px 12px',
-        // 内嵌在 DSH 面板里时，整页吃掉 iframe 的可用高度，别在下面留一大片空白
-        height: '100vh',
-        minHeight: 640,
-        display: 'flex',
-        flexDirection: 'column',
-        boxSizing: 'border-box',
-      }}
+      className="zw-main"
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10, flexWrap: 'wrap', flexShrink: 0 }}>
+      <div className="zw-toolbar">
         <button
           type="button"
           data-ziwei-reset
@@ -402,145 +449,158 @@ export default function ChartPage() {
             setRestored(false);
             setShared(false);
           }}
-          style={toolbarButtonStyle}
+          className="zw-btn zw-btn-primary"
         >
           ← 重新起盘
         </button>
-        <button type="button" data-ziwei-share data-ziwei-share-url={shareUrl} onClick={() => setShareOpen(true)} style={toolbarButtonStyle}>
+        <button
+          type="button"
+          data-ziwei-share
+          data-ziwei-share-url={shareUrl}
+          onClick={() => setShareOpen(true)}
+          className="zw-btn"
+        >
           分享命盘
         </button>
-        {recent.length > 0 && (
-          <div style={{ position: 'relative' }}>
+        {records.length > 0 && (
+          <div className="zw-menu-anchor" ref={birthMenuRef}>
             <button
               type="button"
               data-ziwei-recent
               aria-expanded={recentOpen}
-              onClick={() => setRecentOpen((open) => !open)}
-              style={toolbarButtonStyle}
+              onClick={() => {
+                setMoreOpen(false);
+                setRecentOpen((open) => !open);
+              }}
+              className="zw-btn"
             >
-              最近生辰 ▾
+              生辰 <span aria-hidden style={{ opacity: 0.6 }}>{records.length}</span> ▾
             </button>
             {recentOpen && (
-              <div
-                data-ziwei-recent-list
-                style={{
-                  position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 40, minWidth: 250,
-                  background: 'var(--t-card)', border: '1px solid var(--t-border)', borderRadius: 10,
-                  boxShadow: '0 12px 32px rgba(13,13,11,0.16)', padding: 6,
-                }}
-              >
-                {recent.map((item) => (
+              <div data-ziwei-recent-list className="zw-menu" role="menu">
+                {records.slice(0, 5).map((item) => (
                   <button
-                    key={`${item.info.year}-${item.info.month}-${item.info.day}-${item.info.hour}-${item.info.gender}`}
+                    key={item.id || `${item.info.year}-${item.info.month}-${item.info.day}-${item.info.hour}-${item.info.gender}-${item.info.name ?? ''}`}
                     type="button"
-                    onClick={() => applyBirth(item.info)}
-                    style={{
-                      display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px',
-                      border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 8,
-                      color: 'var(--t-text1)', font: 'inherit', fontSize: 13,
-                    }}
+                    role="menuitem"
+                    onClick={() => applyStored(item)}
+                    className="zw-menu-item"
+                    style={{ display: 'block' }}
                   >
                     {birthLabel(item)}
                   </button>
                 ))}
-                <div
-                  style={{
-                    marginTop: 6,
-                    paddingTop: 6,
-                    borderTop: '1px solid var(--t-border)',
+                <div className="zw-menu-sep" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-ziwei-manage
+                  onClick={() => {
+                    setRecentOpen(false);
+                    openManager();
                   }}
+                  className="zw-menu-item zw-menu-item-muted"
                 >
-                  <button
-                    type="button"
-                    data-ziwei-clear-all
-                    onClick={handleClearAll}
-                    style={{
-                      display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px',
-                      border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 8,
-                      color: 'var(--t-faint)', font: 'inherit', fontSize: 12,
-                    }}
-                  >
-                    清空全部记录…
-                  </button>
-                </div>
+                  管理全部生辰…
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-ziwei-clear-all
+                  onClick={handleClearAll}
+                  className="zw-menu-item zw-menu-item-danger"
+                >
+                  清空全部记录…
+                </button>
               </div>
             )}
           </div>
         )}
-        <button type="button" data-ziwei-copy onClick={() => void handleCopyDigest()} style={toolbarButtonStyle}>
-          {copied ? '已复制 ✓' : '复制盘面摘要'}
-        </button>
-        {shared && <span style={{ fontSize: 12, color: 'var(--t-faint)' }}>正在查看分享链接里的命盘</span>}
-        {restored && saved && (
-          <span style={{ fontSize: 12, color: 'var(--t-faint)' }}>
-            已恢复上次记住的生辰
-            {saved.savedAt ? `（${saved.savedAt.slice(0, 10)} 保存）` : ''}·{' '}
-            <button
-              type="button"
-              data-ziwei-forget
-              onClick={handleForget}
-              style={{
-                border: 'none', background: 'none', padding: 0, cursor: 'pointer',
-                color: 'var(--t-gold)', textDecoration: 'underline', font: 'inherit',
-              }}
-            >
-              忘记
-            </button>
-          </span>
-        )}
+        <span className="zw-toolbar-spacer" />
+        <div className="zw-menu-anchor" ref={moreMenuRef}>
+          <button
+            type="button"
+            data-ziwei-more
+            aria-label="更多操作"
+            aria-expanded={moreOpen}
+            onClick={() => {
+              setRecentOpen(false);
+              setMoreOpen((open) => !open);
+            }}
+            className="zw-btn zw-btn-ghost"
+          >
+            ⋯
+          </button>
+          {moreOpen && (
+            <div data-ziwei-more-list className="zw-menu zw-menu-right" role="menu">
+              <button
+                type="button"
+                role="menuitem"
+                data-ziwei-copy
+                onClick={() => {
+                  setMoreOpen(false);
+                  void handleCopyDigest();
+                }}
+                className="zw-menu-item"
+              >
+                {copied ? '已复制摘要 ✓' : '复制盘面摘要'}
+              </button>
+              {saved && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-ziwei-forget
+                  onClick={() => {
+                    setMoreOpen(false);
+                    handleForget();
+                  }}
+                  className="zw-menu-item"
+                >
+                  忘记这个生辰
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 左侧排盘 + 命盘总览，右侧解读（解读走 DSH 模型的 /ziwei/ai，见 components/InsightPanel.tsx） */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 420px)',
-          gap: 18,
-          marginTop: 8,
-          flex: 1,
-          minHeight: 0,
-          alignItems: 'stretch',
-        }}
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0, position: 'relative' }}>
+      <div className="zw-workspace">
+        <div className="zw-chartcol">
           {/* 概览条：常驻一行（命宫主星 / 五行局 / 格局数），点开才展开完整总览 */}
-          <div
-            data-ziwei-brief
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              flexWrap: 'wrap',
-              padding: '8px 12px',
-              borderRadius: 10,
-              flexShrink: 0,
-              border: '1px solid var(--t-border)',
-              background: 'var(--t-surface)',
-              fontSize: 12,
-              color: 'var(--t-text2)',
-            }}
-          >
-            <span style={{ color: 'var(--t-gold)', fontWeight: 600 }}>
+          <div data-ziwei-brief className="zw-brief">
+            <span className="zw-brief-strong">
               命宫 · {brief?.mingStars.length ? brief.mingStars.join('') : '空宫'}
             </span>
-            <span style={{ color: 'var(--t-faint)' }}>|</span>
+            <span className="zw-brief-sep">|</span>
             <span>{chart.wuxingJuName}</span>
-            <span style={{ color: 'var(--t-faint)' }}>|</span>
+            <span className="zw-brief-sep">|</span>
             <span>格局 {brief?.patterns.length ?? 0} 个</span>
-            <span style={{ flex: 1 }} />
+            {shared && (
+              <>
+                <span className="zw-brief-sep">|</span>
+                <span>正在查看分享链接里的命盘</span>
+              </>
+            )}
+            {restored && saved && (
+              <>
+                <span className="zw-brief-sep">|</span>
+                <span>
+                  已恢复上次记住的生辰
+                  {saved.savedAt ? `（${saved.savedAt.slice(0, 10)}）` : ''} ·{' '}
+                  <button type="button" data-ziwei-forget onClick={handleForget} className="zw-link">
+                    忘记
+                  </button>
+                </span>
+              </>
+            )}
+            <span className="zw-toolbar-spacer" />
             <button
               type="button"
               data-ziwei-brief-toggle
               onClick={() => setBriefOpen((open) => !open)}
-              style={{
-                border: 'none',
-                background: 'none',
-                padding: 0,
-                cursor: 'pointer',
-                color: 'var(--t-gold)',
-                font: 'inherit',
-                textDecoration: 'underline',
-              }}
+              className="zw-text-btn zw-brief-toggle"
+              style={{ color: 'var(--zw-gold)' }}
             >
               {briefOpen ? '收起命盘概览' : '展开命盘概览'}
             </button>
@@ -552,7 +612,7 @@ export default function ChartPage() {
             </div>
           )}
 
-          <div style={{ flex: 1, minHeight: 0 }}>
+          <div className="zw-chart">
             <ChartBoard
               chart={chart}
               onPalaceSelect={setSelectedPalace}
@@ -587,14 +647,16 @@ export default function ChartPage() {
           )}
         </div>
 
-        <InsightPanel
-        // 换一张盘就重建面板：否则旧盘的解读正文与追问历史会作为上下文继续发给模型
-        key={chart ? digestChart(chart).slice(0, 24) + String(chart.birthInfo.year) + chart.birthInfo.hour : 'empty'}
-        chart={chart}
-        selectedPalace={selectedPalace}
-        autoRun={submitted}
-        petInsets={petInsets}
-      />
+        <div className="zw-insight">
+          <InsightPanel
+            // 换一张盘就重建面板：否则旧盘的解读正文与追问历史会作为上下文继续发给模型
+            key={chart ? digestChart(chart).slice(0, 24) + String(chart.birthInfo.year) + chart.birthInfo.hour : 'empty'}
+            chart={chart}
+            selectedPalace={selectedPalace}
+            autoRun={submitted}
+            petInsets={petInsets}
+          />
+        </div>
       </div>
 
       <ShareModal
@@ -613,6 +675,18 @@ export default function ChartPage() {
         }}
         highlight={brief?.mingStars.join('') || chart.wuxingJuName}
       />
+
+      {managerOpen && (
+        <BirthManager
+          records={records}
+          currentId={saved?.id}
+          onClose={() => setManagerOpen(false)}
+          onApply={applyStored}
+          onEdit={handleEditStored}
+          onDelete={handleDeleteStored}
+          onClearAll={handleClearAll}
+        />
+      )}
     </main>
   );
 }

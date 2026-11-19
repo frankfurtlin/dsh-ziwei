@@ -115,7 +115,7 @@ curl -X POST http://127.0.0.1:3080/ziwei/ai -H 'content-type: application/json' 
 
 ---
 
-## 2. `GET|POST|DELETE /ziwei/birth` — 生辰配置
+## 2. `GET|POST|PATCH|DELETE /ziwei/birth` — 生辰配置
 
 存储文件：`$DSH_HOME/ziwei/birth.json`（默认 `~/.dsh/ziwei/birth.json`，
 可用 `DSH_ZIWEI_BIRTH_FILE` 覆盖），权限 `0600`，写盘走「临时文件 + rename」。
@@ -137,26 +137,59 @@ curl -X POST http://127.0.0.1:3080/ziwei/ai -H 'content-type: application/json' 
 - `hour` 是**时辰序号 0–11**（0=子时 … 11=亥时），不是小时；`form` 是表单原始快照，
   用于「重新起盘」时回填。
 
-### `GET`
+### 记录 id
+
+每条记录在**响应里**都带 `id`，形如 `b_1a2b3c4d5e6f7a8b`：由
+`年份|月|日|时辰|性别|姓名` 用 sha1 推导出的稳定值（前 16 位十六进制）。
+
+- 文件里**不写** `id`，旧文件不需要迁移；同一份生辰每次读到的 `id` 相同。
+- 同一个人改了出生信息（或名字）就是一条新记录，`id` 随之变化；
+  `PATCH` 之后服务端会返回新的 `id`。
+- 客户端用 `id` 定位单条记录做编辑/删除；`id` 不属于敏感信息。
+
+### `GET /ziwei/birth`
 
 ```json
-{ "ok": true, "current": { … } | null, "history": [ … ], "file": "ziwei/birth.json" }
+{
+  "ok": true,
+  "version": 1,
+  "current": { "id": "b_…", "savedAt": "…", "info": { … }, "form": { … } } | null,
+  "history": [ { "id": "b_…", "savedAt": "…", "info": { … }, "form": { … } } ],
+  "file": "ziwei/birth.json"
+}
 ```
 
-### `POST`
+`history` 按保存时间从新到旧；`current` 同时也是 `history[0]`。
+
+### `POST /ziwei/birth`
 
 ```json
 { "info": { "year": 1990, "month": 6, "day": 15, "hour": 5, "gender": "male" },
   "form": { "year": "1990", "month": "6", "day": "15", "hour": "5", "minute": "30", "gender": "male" } }
 ```
 
-返回 `{ ok: true, current: {…}, file: "ziwei/birth.json" }`。`info` 非法（年月日/时辰越界、
-gender 不是 `male|female`）→ 400。
+保存一条生辰并设为 `current`。返回 `{ ok: true, current: { id, … }, file: "ziwei/birth.json" }`。
+`info` 非法（年月日/时辰越界、gender 不是 `male|female`）→ 400。
 
-> `file` 只回相对 `$DSH_HOME` 的位置。真实路径（`/root/.dsh/ziwei/birth.json`）不会出现在
-> 任何响应里：绝对路径会漏出用户名与本机目录结构。
+### `PATCH /ziwei/birth/:id`
 
-### `DELETE`
+```json
+{ "info": { "year": 1981, "month": 3, "day": 4, "hour": 0, "gender": "male", "name": "管理甲改" },
+  "form": { "year": "1981", "month": "3", "day": "4", "gender": "male", "name": "管理甲改", … } }
+```
+
+原地替换这一条记录（保留原来的 `savedAt`）；如果它正是 `current`，`current` 一起更新。
+
+- 如果改完与另一条记录的「身份」相同，会合并成一条（不产生重复）。
+- 返回更新后的完整列表：`{ ok: true, version, current, history, file }`。
+- `id` 不存在 → 404；`info` 非法 / 缺请求体 → 400。
+
+### `DELETE /ziwei/birth/:id`
+
+只删这一条；如果删的是 `current`，`current` 置为 `null`，其它历史不受影响。
+返回 `{ ok: true, scope: "record", id: "b_…", current, history, file }`；`id` 不存在 → 404。
+
+### `DELETE /ziwei/birth`
 
 两种作用范围，靠查询参数区分：
 
@@ -166,16 +199,19 @@ gender 不是 `male|female`）→ 400。
 | `DELETE /ziwei/birth?scope=all` | `current` 与 `history` 一起清空 | `{ ok: true, scope: "all", current: null, history: [] }` |
 
 界面对应：「忘记这个生辰」/「忘记」= 默认那一种（保留最近列表），「清空全部记录…」=
-`scope=all`（清空前会二次确认）。
+`scope=all`（清空前会二次确认），生辰管理里的单条「删除」= `DELETE /ziwei/birth/:id`。
 
 > 早期版本默认就把 `history` 一起删了，用户点一次「忘记」等于抹掉全部记录，
 > 验收脚本回写时也只用 `current`，把「最近生辰」的历史冲掉过。默认值改保守了以后，
 > 删除全部必须显式写 `?scope=all`。
 
+### 状态码
+
 | 状态 | 场景 |
 | --- | --- |
-| 400 | JSON 解析失败、缺请求体、`info` 非法 |
-| 405 | 用了 GET/POST/DELETE 以外的方法（带 `Allow` 头） |
+| 400 | JSON 解析失败、缺请求体、`info` 非法、缺 `id` |
+| 404 | `PATCH`/`DELETE` 单条时 `id` 不存在 |
+| 405 | 方法或路径组合不支持（带 `Allow` 头，例如对单条记录 `GET`） |
 | 413 | 请求体超过 256 KiB |
 
 ---

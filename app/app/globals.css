@@ -56,6 +56,23 @@
   --r-lg:  16px;
   --r-xl:  24px;
   --r-pill:999px;
+
+  /* ─── 3.0 设计系统（排版 / 语义 / 控件） ─── */
+  --zw-serif: 'Songti SC', 'Noto Serif SC', 'Source Han Serif SC', 'SimSun', serif;
+  --zw-ink: #17150f;
+  --zw-ink-2: #4a463c;
+  --zw-ink-3: #6f6a5e;
+  --zw-line: rgba(23,21,15,0.12);
+  --zw-line-strong: rgba(23,21,15,0.24);
+  --zw-gold: #7a5c10;
+  --zw-gold-bg: rgba(138,106,18,0.08);
+  --zw-gold-line: rgba(138,106,18,0.30);
+  --zw-danger: #8f2f22;
+  --zw-lu: #2f6b46;
+  --zw-quan: #1f4f8f;
+  --zw-ke: #7a5c10;
+  --zw-ji: #93342a;
+  --zw-touch: 40px;
 }
 
 /* ─── 暗色模式 Token 覆盖 ──────────────────────────────── */
@@ -109,11 +126,11 @@
   --t-text:       #0D0D0B;
   --t-text1:      #1A1A18;
   --t-text2:      #4A4A45;
-  --t-faint:      rgba(13,13,11,0.52);
+  --t-faint:      rgba(13,13,11,0.62);
   --t-border:     rgba(13,13,11,0.16);
   --board-shadow: 0 1px 3px rgba(13,13,11,0.06), 0 16px 40px rgba(13,13,11,0.07);
   --t-border-acc: rgba(184,146,42,0.38);
-  --t-gold:       #8A6A12;
+  --t-gold:       #7A5C10;
 
   /* 星曜语义色（浅色底要压深，否则在白色上发飘） */
   --star-bright: #8A5A00;
@@ -488,3 +505,306 @@ body {
    select 本身是半透明底 + 浅色字，Windows 上原生下拉列表是白底，浅灰字配白底看不清（#14） */
 [data-theme="dark"] select { color-scheme: dark; }
 [data-theme="dark"] select option { background-color: var(--bg-2); color: var(--tx-1); }
+
+/* ─── 命盘页 / DSH 手机端窄面板适配 ─────────────────────────
+   手机端（以及 DSH 侧栏面板被拖窄时）把「排盘 + 解读」两栏堆叠：
+   盘面固定成近方形高度、解读面板单独一块，避免 420px 右栏把左栏挤成一条。 */
+.zw-form {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 40px 20px 56px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  box-sizing: border-box;
+}
+.zw-main {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 14px 16px 12px;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 640px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+.zw-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.zw-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 420px);
+  gap: 18px;
+  margin-top: 8px;
+  flex: 1;
+  min-height: 0;
+  align-items: stretch;
+}
+.zw-chartcol {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  position: relative;
+}
+.zw-chart { flex: 1; min-height: 0; }
+.zw-insight { min-height: 0; display: flex; }
+.zw-insight > aside { width: 100%; }
+
+@media (max-width: 900px) {
+  .zw-form {
+    padding: 28px 16px 40px;
+    min-height: 100dvh;
+    justify-content: flex-start;
+  }
+  .zw-main {
+    height: auto;
+    min-height: 100dvh;
+    padding: 10px 10px 16px;
+  }
+  .zw-toolbar { gap: 6px; margin-bottom: 8px; }
+  .zw-toolbar button { padding: 5px 9px !important; font-size: 12px !important; }
+  .zw-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    margin-top: 6px;
+    flex: none;
+  }
+  .zw-chartcol { gap: 8px; }
+  .zw-chart { height: auto; flex: none; }
+  .zw-insight { height: 62vh; min-height: 360px; }
+}
+
+@media (max-width: 560px) {
+  /* 概览条在手机上收起分隔线，展开按钮靠右，避免出现半截竖线 */
+  .zw-brief { row-gap: 2px; }
+  .zw-brief-sep { display: none; }
+  .zw-brief .zw-toolbar-spacer { display: none; }
+  .zw-brief-toggle { margin-left: auto; }
+}
+
+@media (max-width: 420px) {
+  .zw-main { padding: 8px 8px 12px; }
+  .zw-chart { height: auto; }
+  .zw-insight { height: 60vh; min-height: 320px; }
+}
+
+/* ─── 暗色模式：命盘语义 token（此前 --t-* 只给浅色，暗色会掉成默认黑字） ─── */
+[data-theme="dark"] {
+  --zw-ink: #ece7dc;
+  --zw-ink-2: #c9c2b2;
+  --zw-ink-3: #a8a08f;
+  --zw-line: rgba(255,255,255,0.14);
+  --zw-line-strong: rgba(255,255,255,0.26);
+  --zw-gold: #d9b45a;
+  --zw-gold-bg: rgba(217,180,90,0.12);
+  --zw-gold-line: rgba(217,180,90,0.35);
+  --zw-danger: #e08577;
+  --zw-lu: #7fc9a0;
+  --zw-quan: #8ab4e8;
+  --zw-ke: #e0c170;
+  --zw-ji: #ef9a8d;
+
+  --t-bg:         #0b0f17;
+  --t-card:       #121826;
+  --t-surface:    #161d2b;
+  --t-text:       #e8eef6;
+  --t-text1:      #dce4f0;
+  --t-text2:      #a9bad6;
+  --t-faint:      rgba(220,228,240,0.66);
+  --t-border:     rgba(255,255,255,0.16);
+  --t-gold:       #d9b45a;
+  --t-border-acc: rgba(217,180,90,0.40);
+  --star-bright:  #f2cf70;
+  --star-normal:  #e0b458;
+  --star-dim:     rgba(196,150,90,0.75);
+  --star-lucky:   #7fb6d8;
+  --star-sha:     #e08a7f;
+}
+
+/* ─── 3.0 控件：工具条 / 菜单 / 概览条 ─────────────────────── */
+.zw-toolbar { align-items: center; gap: 8px; }
+.zw-toolbar-spacer { flex: 1 1 auto; }
+.zw-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 12px; border-radius: 8px;
+  border: 1px solid var(--zw-line); background: transparent;
+  color: var(--zw-ink); font: inherit; font-size: 12.5px; letter-spacing: 0.02em;
+  cursor: pointer; white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.zw-btn:hover { background: var(--zw-gold-bg); border-color: var(--zw-gold-line); }
+.zw-btn:focus-visible { outline: 2px solid var(--zw-gold); outline-offset: 2px; }
+.zw-btn-primary { background: var(--zw-ink); border-color: var(--zw-ink); color: #fffaf0; font-weight: 500; }
+[data-theme="dark"] .zw-btn-primary { color: #12151c; }
+.zw-btn-primary:hover { background: var(--zw-ink); border-color: var(--zw-ink); opacity: 0.92; }
+.zw-btn-ghost { border-color: transparent; color: var(--zw-ink-3); }
+.zw-btn-ghost:hover { color: var(--zw-ink); }
+.zw-btn[aria-expanded="true"] { background: var(--zw-gold-bg); border-color: var(--zw-gold-line); }
+
+.zw-menu-anchor { position: relative; display: inline-flex; }
+.zw-menu {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 60;
+  min-width: 248px; padding: 6px;
+  background: var(--t-card); border: 1px solid var(--zw-line);
+  border-radius: 10px; box-shadow: var(--sh-md);
+}
+.zw-menu-right { left: auto; right: 0; min-width: 176px; }
+.zw-menu-item {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 8px 10px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--zw-ink);
+  font: inherit; font-size: 12.5px; text-align: left; cursor: pointer;
+}
+.zw-menu-item:hover { background: var(--zw-gold-bg); }
+.zw-menu-item-muted { color: var(--zw-ink-3); font-size: 12px; }
+.zw-menu-item-danger { color: var(--zw-danger); }
+.zw-menu-sep { height: 1px; margin: 4px 0; background: var(--zw-line); }
+.zw-menu-label { padding: 6px 10px 2px; font-size: 10.5px; letter-spacing: 0.14em; color: var(--zw-ink-3); }
+
+.zw-link {
+  border: 0; background: none; padding: 0; font: inherit;
+  color: var(--zw-gold); text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
+.zw-meta { font-size: 11.5px; color: var(--zw-ink-3); }
+.zw-brief {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 12px; border: 1px solid var(--zw-line); border-radius: 10px;
+  background: var(--t-surface); font-size: 12px; color: var(--zw-ink-2); flex-shrink: 0;
+}
+.zw-brief-sep { color: var(--zw-line-strong); }
+.zw-brief-strong { color: var(--zw-gold); font-weight: 600; }
+
+/* ─── 命盘宫格：三级字阶 / 四个语义色 / 点选状态 ─────────── */
+.palace-cell { min-height: 90px; padding: 6px 7px; background: var(--t-bg); }
+.palace-cell.is-daxian { background: var(--zw-gold-bg); box-shadow: inset 0 0 0 1px var(--zw-gold-line); }
+.palace-cell.is-selected { background: rgba(23,21,15,0.06); box-shadow: inset 0 0 0 1.5px var(--zw-ink); }
+.palace-cell.is-sanfang { background: rgba(23,21,15,0.025); box-shadow: inset 0 0 0 1px rgba(23,21,15,0.22); }
+.palace-cell.is-ming { box-shadow: inset 2px 0 0 var(--zw-gold); }
+.palace-cell.is-ming.is-daxian { box-shadow: inset 2px 0 0 var(--zw-gold), inset 0 0 0 1px var(--zw-gold-line); }
+.palace-cell.is-selected.is-sanfang { box-shadow: inset 0 0 0 1.5px var(--zw-ink); }
+.palace-name { font-size: 11px; font-weight: 500; color: var(--zw-ink-2); letter-spacing: 0.04em; white-space: nowrap; }
+.palace-cell.is-ming .palace-name { color: var(--zw-gold); }
+.palace-tag {
+  font-size: 9px; line-height: 1; padding: 1px 3px; border-radius: 3px;
+  border: 1px solid var(--zw-gold-line); color: var(--zw-gold); letter-spacing: 0.04em;
+}
+.palace-tag-shen { border-color: var(--zw-line-strong); color: var(--zw-ink-2); }
+.palace-meta { font: 10.5px/1.45 var(--font-mono); color: var(--zw-ink-3); font-variant-numeric: tabular-nums; }
+.palace-major { font-size: 17px; font-weight: 600; line-height: 1.25; letter-spacing: 0.02em; color: var(--zw-ink); cursor: pointer; }
+.palace-major:hover { color: var(--zw-gold); }
+.palace-major[data-brightness="dim"] { color: var(--zw-ink-3); }
+.palace-major[data-brightness="normal"] { color: var(--zw-ink-2); }
+.palace-empty { font-size: 11px; color: var(--zw-ink-3); }
+.palace-aux { font-size: 11px; line-height: 1.5; white-space: nowrap; }
+.palace-lucky { color: var(--zw-lu); }
+.palace-sha { color: var(--zw-ji); }
+.palace-sihua {
+  display: inline-flex; align-items: center; gap: 2px; margin-left: 3px;
+  padding: 0 4px; border-radius: 999px; border: 1px solid currentColor;
+  font-size: 9.5px; line-height: 1.4; font-weight: 600;
+}
+.palace-sihua[data-sihua="禄"] { color: var(--zw-lu); }
+.palace-sihua[data-sihua="权"] { color: var(--zw-quan); }
+.palace-sihua[data-sihua="科"] { color: var(--zw-ke); }
+.palace-sihua[data-sihua="忌"] { color: var(--zw-ji); }
+.palace-sihua[data-overlay="true"] { border-style: dashed; opacity: 0.85; }
+.palace-aux-count { display: none; align-self: flex-start; margin-top: 2px; font-size: 10px; color: var(--zw-ink-3); }
+
+/* ─── 命盘标题 / 图例 / 中央信息 ─────────────────────────── */
+.zw-chart-head { text-align: center; margin-bottom: 10px; }
+.zw-chart-kicker { font-size: 9.5px; letter-spacing: 0.48em; color: var(--zw-ink-3); }
+.zw-chart-title { margin-top: 3px; font-family: var(--zw-serif); font-size: 15px; letter-spacing: 0.22em; color: var(--zw-ink-2); }
+.zw-legend { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: 11px; color: var(--zw-ink-3); }
+.zw-legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.zw-legend-dot { width: 6px; height: 6px; border-radius: 50%; }
+.zw-legend-dot[data-sihua="禄"] { background: var(--zw-lu); }
+.zw-legend-dot[data-sihua="权"] { background: var(--zw-quan); }
+.zw-legend-dot[data-sihua="科"] { background: var(--zw-ke); }
+.zw-legend-dot[data-sihua="忌"] { background: var(--zw-ji); }
+.zw-center-daxian { border: 1px solid var(--zw-gold-line); background: var(--zw-gold-bg); border-radius: 10px; padding: 6px 12px; text-align: center; }
+.zw-center-daxian-kicker { font-size: 9.5px; color: var(--zw-ink-3); letter-spacing: 0.1em; }
+.zw-center-daxian-age { font: 600 13px/1.3 var(--font-mono); color: var(--zw-gold); font-variant-numeric: tabular-nums; }
+.zw-center-daxian-palace { font-size: 10.5px; color: var(--zw-ink-3); }
+
+/* ─── 解读面板空态 ───────────────────────────────────────── */
+.zw-insight-empty { display: flex; flex-direction: column; gap: 14px; padding: 6px 2px; }
+.zw-empty-title { font-family: var(--zw-serif); font-size: 16px; font-weight: 600; color: var(--zw-ink); letter-spacing: 0.04em; }
+.zw-empty-copy { margin-top: 6px; font-size: 12px; line-height: 1.7; color: var(--zw-ink-3); }
+.zw-samples { display: flex; flex-direction: column; gap: 6px; }
+.zw-chip {
+  padding: 7px 10px; text-align: left; border: 1px solid var(--zw-line); border-radius: 8px;
+  background: transparent; color: var(--zw-ink-2); font: inherit; font-size: 12px; cursor: pointer;
+}
+.zw-chip:hover { border-color: var(--zw-gold-line); background: var(--zw-gold-bg); color: var(--zw-gold); }
+
+/* ─── 表单 / 生辰管理 ───────────────────────────────────── */
+.zw-form-card { background: var(--t-card); border: 1px solid var(--zw-line); border-radius: 16px; padding: 24px; box-shadow: var(--sh-sm); }
+.zw-form-kicker { font-size: 10px; letter-spacing: 0.36em; color: var(--zw-ink-3); text-align: center; }
+.zw-form-title { margin-top: 6px; font-family: var(--zw-serif); font-size: 18px; font-weight: 600; color: var(--zw-ink); text-align: center; letter-spacing: 0.04em; }
+.zw-field-label { display: block; font-size: 12px; color: var(--zw-ink-3); margin-bottom: 6px; letter-spacing: 0.02em; }
+.zw-input {
+  width: 100%; padding: 9px 11px; border: 1px solid var(--zw-line); border-radius: 9px;
+  background: var(--t-surface); color: var(--zw-ink); font: inherit; font-size: 13px;
+  outline: none; transition: border-color 0.15s ease, background 0.15s ease;
+}
+.zw-input:focus { border-color: var(--zw-gold); }
+.zw-select {
+  appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236f6a5e' stroke-width='1.2' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center; background-size: 10px;
+  padding-right: 28px;
+}
+.zw-gender {
+  flex: 1; padding: 10px; border-radius: 9px; border: 1px solid var(--zw-line);
+  background: var(--t-surface); color: var(--zw-ink-3); font-size: 13px; cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.zw-gender.is-active { background: var(--zw-ink); border-color: var(--zw-ink); color: #fffaf0; font-weight: 500; }
+[data-theme="dark"] .zw-gender.is-active { color: #12151c; }
+.zw-submit {
+  width: 100%; padding: 12px; border: 0; border-radius: 10px;
+  background: var(--zw-ink); color: #fffaf0; font-size: 13px; font-weight: 600;
+  letter-spacing: 0.12em; cursor: pointer; transition: opacity 0.15s ease;
+}
+[data-theme="dark"] .zw-submit { color: #12151c; }
+.zw-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+.zw-manager { background: var(--t-card); color: var(--zw-ink); border: 1px solid var(--zw-line); border-radius: 16px; box-shadow: 0 24px 70px rgba(0,0,0,0.35); }
+.zw-manager-head { display: flex; align-items: flex-start; gap: 12px; padding: 16px 20px 12px; border-bottom: 1px solid var(--zw-line); }
+.zw-manager-title { font-family: var(--zw-serif); font-size: 16px; font-weight: 600; letter-spacing: 0.08em; color: var(--zw-ink); }
+.zw-manager-sub { margin-top: 4px; font-size: 11.5px; color: var(--zw-ink-3); }
+.zw-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--zw-line); }
+.zw-row-name { font-size: 13.5px; font-weight: 600; color: var(--zw-ink); }
+.zw-row-birth { margin-top: 3px; font-size: 12px; color: var(--zw-ink-2); }
+.zw-row-time { margin-top: 3px; font-size: 11px; color: var(--zw-ink-3); }
+.zw-badge-current { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; font-size: 10.5px; color: var(--zw-gold); white-space: nowrap; }
+.zw-badge-current::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--zw-gold); }
+.zw-text-btn {
+  padding: 5px 8px; border: 0; border-radius: 6px; background: none;
+  color: var(--zw-ink-3); font: inherit; font-size: 11.5px; cursor: pointer; white-space: nowrap;
+}
+.zw-text-btn:hover { color: var(--zw-ink); background: var(--zw-gold-bg); }
+.zw-text-btn-danger { color: var(--zw-danger); }
+.zw-text-btn-danger:hover { color: var(--zw-danger); background: rgba(143,47,34,0.08); }
+
+/* ─── 窄屏：辅助星折叠为 +N，触控目标 ≥40px ─────────────── */
+@media (max-width: 560px) {
+  .palace-cell { min-height: 66px; padding: 4px 5px; }
+  .palace-major { font-size: 14.5px; }
+  .palace-name { font-size: 10.5px; }
+  .palace-meta { font-size: 9.5px; }
+  .palace-aux-lines { display: none; }
+  .palace-aux-count { display: inline-flex; }
+}
+@media (max-width: 900px) {
+  .zw-btn { height: 40px; padding: 0 13px; font-size: 13px; }
+  .zw-menu-item { padding: 11px 10px; font-size: 13px; }
+  .zw-menu { min-width: 240px; }
+}

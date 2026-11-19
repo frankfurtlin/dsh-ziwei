@@ -48,7 +48,7 @@ scripts/install-hooks.sh    # 装 pre-commit：静态检查不过就提交不了
 
 在 `/tmp/dsh-ziwei-check` 起一个**完全隔离**的 DSH 实例：
 
-- 独立 `DSH_HOME`、独立端口 `3099`、独立会话/cookie/生辰配置；
+- 独立 `DSH_HOME`、独立端口（默认 `3099`，被别的实例占用时自动顺延到 3100–3103）、独立会话/cookie/生辰配置；
 - `profiles/check` 用符号链接复用生产 profile 的 `node_modules` 与 `cordis.patch.yml`（不复制 2G 依赖）；
 - 复制生产 `.credentials.yaml`（否则 `/ziwei/ai` 报 `no credential`）；
 - 复制生产 `storages/workspace.json`（全新 home 没有工作区时，「让 DSH 解读」会卡在「Choose a workspace first」）；
@@ -60,7 +60,7 @@ scripts/install-hooks.sh    # 装 pre-commit：静态检查不过就提交不了
 | 脚本 | 项数 | 覆盖 |
 | --- | --- | --- |
 | `verify.mjs --ask` | 47 | 见下方清单 |
-| `app/test-persistence.mjs` | 16 | 生辰写进服务端配置 → 重载恢复 → 换浏览器上下文仍能恢复 → 重新起盘回填 → 「忘记」只清当前、历史保留 → 完整还原 |
+| `app/test-persistence.mjs` | 32 | 生辰写进服务端配置 → 重载恢复 → 换浏览器上下文仍能恢复 → 生辰管理（列出全部 / 编辑单条 / 删除单条）→ 重新起盘回填 → 「忘记」只清当前、历史保留 → 手机端 390×844 表单页/命盘页无横向溢出、管理弹层不出界 → 完整还原 |
 
 ---
 
@@ -115,11 +115,31 @@ scripts/install-hooks.sh    # 装 pre-commit：静态检查不过就提交不了
 
 ---
 
-## 三、`app/test-persistence.mjs` 的 16 项
+## 三、`app/test-persistence.mjs` 的 32 项
 
-清空 → 起盘 → 读出服务端记录（含 `form`）→ reload 自动恢复（不再显示表单）→
-**换一个全新 browserContext 仍能恢复**（证明与浏览器存储无关）→ 重新起盘时表单回填 →
-「忘记这个生辰」后 `current=null` 但 `history` 还在 → 结束时完整还原快照。
+清空 → 用接口预置 3 条历史（带表单快照的 A、旧版没有快照的 C、用来测删除的 B）→
+起盘 1990 → 读出服务端记录（带 `id` 与 `form`）→ reload 自动恢复（不再显示表单）→
+**换一个全新 browserContext 仍能恢复**（证明与浏览器存储无关）→
+
+生辰管理：
+
+- 打开「生辰管理」列出全部 4 条，每行带合法 `id`，当前命盘那条标「当前」；
+- 编辑 A：表单回填年份与姓名 → 改名保存 → 服务端只替换这一条（不是新增、不残留旧记录）；
+- 编辑 C：出现「时间按该时辰中点预填」提示 → 直接保存 → 时辰不变且补上表单快照；
+- 删除 B：只少这一条，当前命盘与其它历史保留；
+- 删除当前那条：`current=null`，其它历史保留；
+- 写回 1990 后重新起盘，表单仍能回填；
+
+「忘记这个生辰」后 `current=null` 但 `history` 还在，且从表单页打开「生辰管理」
+仍能看到历史 →
+
+手机端（视口 390×844）：
+
+- 生辰表单页 `scrollWidth <= clientWidth`，不横向溢出；
+- 从「最近用过」起盘后，命盘页同样不横向溢出（工具条换行、盘面与解读面板上下堆叠）；
+- 「生辰管理」弹层落在视口内（不超出左右边界、顶部不出屏）；
+
+结束时完整还原快照。
 
 ---
 
@@ -147,7 +167,7 @@ systemd-run --on-active=120s --unit=dsh-ziwei-deploy \
 
 | 现象 | 原因 / 处理 |
 | --- | --- |
-| 隔离实例起不来、`EADDRINUSE` | 上一次的 3099 没杀干净。`pgrep -af '[n]ode .*--profile check'` 找真 node 进程再 kill |
+| 隔离实例起不来、`EADDRINUSE` | 上一次的实例没杀干净，或别的 agent 占了 3099。`pgrep -af '[n]ode .*--profile check'` 找真 node 进程再 kill；脚本本身会自动顺延端口 |
 | 日志里没有 token | dsh 只在启动早期打印一次 `?token=`。取 `grep -o '...token=[A-Za-z0-9_-]*' log \| head -1`（`tail -1` 常取空） |
 | 「让 DSH 解读」卡在 Choose a workspace | 隔离 home 没有工作区，检查有没有复制 `storages/workspace.json` |
 | 解读断言全挂、日志有 `no credential` | 没复制 `.credentials.yaml` |

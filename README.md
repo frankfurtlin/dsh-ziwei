@@ -6,7 +6,7 @@
 排盘应用（原来的独立站点 `workspace/ziwei-doushu`）已经整体收进本仓库的 `app/`，
 现在只有这一个插件版本，独立部署的那份不再存在。
 
-- 侧栏顺序：Automation tasks(10) → **紫微斗数(20)** → Skill Center(30)
+- 侧栏顺序：Automation tasks(10) → **紫微斗数(16)** → Skill Center(30)
 - 公网入口（`hermes.frankfurtlin.top/ziwei/`）已于 2026-11-03 撤掉，现在只能通过 DSH 登录态访问
 - 插件目录：`/root/workspace/plugins/dsh-ziwei`，注册在 `/root/.dsh/profiles/web/package.json`
 - 应用目录：本仓库 `app/`，由 `dsh-ziwei-app.service` 跑在 `127.0.0.1:8815`
@@ -31,9 +31,10 @@ scripts/install-hooks.sh    # 装 pre-commit，静态不过就提交不了
 | [docs/architecture.md](docs/architecture.md) | 两层结构、请求链路与鉴权、三个入口分工、数据落盘、面板座位与 `postMessage` 协议 |
 | [docs/api.md](docs/api.md) | `/ziwei/ai`（SSE 协议、限制、错误码）与 `/ziwei/birth`（配置读写）的完整接口 |
 | [docs/app-map.md](docs/app-map.md) | 应用能力地图：路由、排盘页五段结构、布局约束、组件与内核模块清单、主题 token、回归测试 |
-| [docs/testing.md](docs/testing.md) | **自检与验收**：`scripts/check.sh` 一键跑静态 + 构建 + 隔离实例端到端，47+16 项分别验什么、常见坑 |
+| [docs/testing.md](docs/testing.md) | **自检与验收**：`scripts/check.sh` 一键跑静态 + 构建 + 隔离实例端到端，47+32 项分别验什么、常见坑 |
 | [docs/deploy.md](docs/deploy.md) | 服务单元、注册方式、改什么重启什么、构建、验收命令、测试实例、回滚、故障排查 |
 | [docs/changelog.md](docs/changelog.md) | 从独立站点到插件的演进与踩过的坑 |
+| [docs/design-review.md](docs/design-review.md) | **设计评审**：视觉层级、字阶、语义色、对比度、组件一致性与优化顺序 |
 
 ## 它由哪几块组成
 
@@ -46,7 +47,7 @@ scripts/install-hooks.sh    # 装 pre-commit，静态不过就提交不了
 | `lib/birth-store.js` | host 半：生辰的服务端存储，读写 `$DSH_HOME/ziwei/birth.json`（0600） |
 | `client.js` | client 半：注册侧栏行（panellist 座位）+ 主面板（main 座位，keyed=`ziwei`）；面板顶部分段控件切换排盘/合盘/古籍/百科四个视图，内嵌同源 iframe |
 | `verify.mjs` | 真实浏览器验收（playwright，47 项），默认打测试实例，可指定生产地址 |
-| `app/test-persistence.mjs` | 生辰服务端存储与恢复的验收（playwright，16 项） |
+| `app/test-persistence.mjs` | 生辰服务端存储、恢复与管理的验收（playwright，32 项，含手机端 390×844 布局） |
 | `scripts/check.sh` | **改完代码跑这个**：静态检查 + 构建重启 + 隔离实例上跑上面两个脚本 |
 | `scripts/install-hooks.sh` | 装 pre-commit（只跑静态检查，约 40 秒） |
 | `restart-and-verify.sh` | 生产重启 + 自动验收，脱离当前会话执行（见下） |
@@ -72,16 +73,24 @@ scripts/install-hooks.sh    # 装 pre-commit，静态不过就提交不了
     "history": [ { "savedAt": "...", "info": { }, "form": { } } ] }
   ```
   `current` 用来恢复命盘，`history` 保留最近 20 次不同的人生辰（同一个人重复起盘只留一条）。
-- 读写走同源接口 `GET/POST/DELETE /ziwei/birth`，和 `/ziwei/ai` 一样在 DSH 登录闸门后面：
+- 每条记录在接口响应里带 `id`（由出生信息推导的稳定值，文件里不写、旧文件不用迁移），
+  用来定位单条记录做编辑和删除。
+- 读写走同源接口 `GET/POST/PATCH/DELETE /ziwei/birth`（单条是 `/ziwei/birth/:id`），
+  和 `/ziwei/ai` 一样在 DSH 登录闸门后面：
   未登录 401，公网拿不到；数据只写本机文件，不上传、不经过第三方。
 - 好处是**换浏览器/换设备/清缓存都能恢复**；代价是这属于本机的敏感数据，
   文件 0600、只有当前用户能读。
-- 「忘记这个生辰」（表单页）或盘面页的「忘记」→ `DELETE`，把 `current` 与 `history` 一起清空。
+- 「忘记这个生辰」（表单页）或盘面页的「忘记」→ `DELETE`，只清 `current`（下次打开不再自动恢复），
+  `history` 保留；要连历史一起清空，用「清空全部记录…」（`?scope=all`）。
+- 「生辰管理」：表单页「管理全部生辰（N）…」或盘面工具条「生辰 N ▾」菜单里的「管理全部生辰…」打开，列出全部记录；
+  可以对任意一条重新起盘、编辑（表单回填后保存，原地替换）或删除（二次确认）。
+  旧版没有表单快照的记录会提示「时间按该时辰中点预填」，保存后补上快照、时辰不变。
 - 早期版本写过浏览器 `localStorage`（键 `ziwei-birth-v1`）；页面加载时会顺手把那条旧记录删掉。
 - 恢复盘面时**不会**自动调用模型（省一次调用）：面板显示「已恢复上次生辰的命盘，
   点上面的标签即可解读」；只有手动起盘那一轮才会自动生成「命格总览」。
 - 回归测试：`node test-persistence.mjs --url http://127.0.0.1:3099/ziwei/chart --token <token>`
-  （清空 → 起盘写配置 → 重载恢复 → 换浏览器上下文仍能恢复 → 重新起盘回填 → 忘记清空；
+  （清空 → 预置历史 → 起盘写配置 → 重载恢复 → 换浏览器上下文仍能恢复 → 生辰管理：
+  列出全部 / 编辑单条 / 删除单条 → 重新起盘回填 → 忘记后历史保留；
   会先快照并在结束时还原生产上已有的记录，不会冲掉用户数据）。
 
 ### 版面：撑满可用高度
@@ -94,6 +103,11 @@ scripts/install-hooks.sh    # 装 pre-commit，静态不过就提交不了
   里的遮挡矩形，`postMessage({type:'dsh-ziwei:insets', bottom, right})` 给排盘页，
   输入区据此让开（页面 `<main data-pet-insets="bottom,right">` 便于验收断言），
   否则「追问」按钮的真实点击会被宠物吞掉。
+
+**手机端 / 窄面板（`max-width: 900px`）**：两栏改成上下堆叠（`.zw-workspace`），
+盘面按宽度撑开、解读面板单独一块（60vh 可滚动），排盘页与表单页都不产生横向滚动；
+插件工具条在窄屏隐藏状态文案与「新窗口打开」、问句输入框独占一行，
+并在触摸设备上给左上角系统菜单按钮留出 60px 安全区，避免「紫微斗数」标题被挡住。
 
 ### 解读面板：由 DSH 的模型生成
 
@@ -163,9 +177,12 @@ scripts/install-hooks.sh    # 装 pre-commit，静态不过就提交不了
 ### 工具条上的两个小功能
 
 - **最近生辰**：宿主把用过的生辰存在 `$DSH_HOME/ziwei/birth.json`（最多 20 条去重），
-  工具条「最近生辰 ▾」直接列出最近 5 条，点一条即换成那张盘；表单页顶部也有「最近用过」
+  工具条「生辰 N ▾」直接列出最近 5 条，点一条即换成那张盘；表单页顶部也有「最近用过」
   的胶囊按钮。不写浏览器存储，换浏览器也在。
-- **复制盘面摘要**：把 `digestChart()` 生成的命盘文本复制到剪贴板，可以直接贴进任意会话，
+- **生辰管理**：工具条「生辰 N ▾」菜单里的「管理全部生辰…」或表单页「管理全部生辰（N）…」打开弹层，
+  列出全部记录（当前那条有标记），可以起盘、编辑（表单回填）或单条删除；
+  弹层里仍保留「清空全部记录…」。
+- **复制盘面摘要**：收在工具条右侧「⋯」菜单里，把 `digestChart()` 生成的命盘文本复制到剪贴板，可以直接贴进任意会话，
   不必经过「让 DSH 解读」开新会话。
 
 ### 命盘页上的三处零件
@@ -242,7 +259,8 @@ sudo systemd-run --on-active=10s --unit=dsh-ziwei-verify \
 
 侧栏入口与顺序、面板打开、iframe 渲染、配色跟随外壳、登录/未登录鉴权、起盘、
 **版面纵向撑满**、**宠物遮挡区域同步给内嵌页**、
-**生辰写进服务端配置（含表单快照、不再写 localStorage）**、
+**生辰写进服务端配置（含表单快照与稳定 id、不再写 localStorage）**、
+**生辰管理能列出全部记录 / 编辑单条 / 删除单条**、
 **解读面板存在（由 DSH 模型生成）**、**应用旧 `/api/interpret` 已 404**、
 **自动生成命格解读**、**切 tab 重新解读**、**追问按钮不被宠物浮层遮挡**、
 **追问带上下文继续解读**、**命盘概览抽屉展开/收起**、**点星弹出星曜详情**、

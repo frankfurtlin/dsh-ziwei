@@ -3,8 +3,8 @@
  *
  * 手写 ModuleLoader 工厂，不经打包：只依赖宿主已提供的 react / react/jsx-runtime，
  * 用 h() 直接构造元素。做两件事：
- *   1. 在侧栏「插件」组的 panellist 座位注册一行「紫微斗数」（order 20，落在
- *      Automation tasks(10) 与 Skill Center(30) 之间）。
+ *   1. 在侧栏「插件」组的 panellist 座位注册一行「紫微斗数」（order 16，落在
+ *      知识库(14) 与华尔街之狼(18) 之间）。
  *   2. 在 main 座位注册 keyed 面板页：同源 iframe 指向宿主反代的 /ziwei/，
  *      并把 iframe 上报的盘面摘要组装成 prompt，一键开新会话交给 DSH Agent。
  */
@@ -20,8 +20,8 @@ window.__ModuleLoader__.load({
 
     /** 侧栏行 id —— 同时是 main 座位的 key 与图标上的 data 锚点。 */
     var PANEL_ID = "ziwei";
-    /** 侧栏顺序：Automation tasks = 10，Skill Center = 30。 */
-    var PANEL_ORDER = 20;
+    /** 侧栏顺序：Automation tasks = 10，酒馆 = 12，知识库 = 14，紫微斗数 = 16，华尔街之狼 = 18。 */
+    var PANEL_ORDER = 16;
 
     var COLORS = {
       border: "color-mix(in srgb, currentColor 18%, transparent)",
@@ -139,6 +139,7 @@ window.__ModuleLoader__.load({
       var [loaded, setLoaded] = react.useState(false);
       var [sent, setSent] = react.useState(false);
       var [copied, setCopied] = react.useState(false);
+      var [moreOpen, setMoreOpen] = react.useState(false);
 
       // 当前在看哪一页：排盘 / 合盘 / 古籍 / 百科。默认落排盘页。
       var [view, setView] = react.useState("chart");
@@ -395,9 +396,20 @@ window.__ModuleLoader__.load({
             width: "100%",
           },
         },
+        h("style", null, [
+          "@media (max-width: 640px) {",
+          "  [data-dsh-ziwei-bar] { padding-left: 52px !important; padding-right: 10px !important; gap: 6px !important; }",
+          "  [data-dsh-ziwei-status], [data-dsh-ziwei-home] { display: none !important; }",
+          "  [data-dsh-ziwei-question] { flex: 1 1 100% !important; width: auto !important; max-width: none !important; }",
+          "}",
+          "@media (max-width: 640px) and (pointer: coarse) {",
+          "  [data-dsh-ziwei-bar] { padding-left: 62px !important; }",
+          "}",
+        ].join("\n")),
         h(
           "div",
           {
+            "data-dsh-ziwei-bar": "",
             style: {
               display: "flex",
               alignItems: "center",
@@ -451,12 +463,13 @@ window.__ModuleLoader__.load({
           ),
           h(
             "span",
-            { style: { fontSize: 12, color: COLORS.muted } },
+            { "data-dsh-ziwei-status": "", style: { fontSize: 12, color: COLORS.muted } },
             hasChart ? "已读取当前盘面，可直接让 DSH 解读" : "在下方排盘后，可一键交给 DSH 解读",
           ),
           h("span", { style: { flex: 1 } }),
           h("input", {
             type: "text",
+            "data-dsh-ziwei-question": "",
             value: question,
             placeholder: "想问什么？（可选）",
             onChange: function (event) {
@@ -479,7 +492,7 @@ window.__ModuleLoader__.load({
           }),
           h(
             ToolbarButton,
-            { primary: true, disabled: !hasChart || !loaded, onClick: askAgent, title: "新开一个 DSH 会话并把盘面交给 Agent" },
+            { primary: true, disabled: !hasChart || !loaded, onClick: askAgent, title: "新开一个 DSH 会话并把盘面交给 Agent；右侧「命理解读」是留在盘边的连续追问" },
             sent ? "已交给 DSH ✓" : "让 DSH 解读",
           ),
           sent
@@ -489,16 +502,82 @@ window.__ModuleLoader__.load({
                 copied ? "已新开会话；命盘也复制到了剪贴板，粘贴发送即可" : "已新开会话，把命盘粘贴到输入框发送即可",
               )
             : null,
-          h(ToolbarButton, { onClick: reload, title: "重新加载排盘页面" }, "刷新"),
           h(
-            "a",
-            {
-              href: homeHref,
-              target: "_blank",
-              rel: "noreferrer",
-              style: { fontSize: 12, color: COLORS.muted, textDecoration: "none" },
-            },
-            "新窗口打开",
+            "div",
+            { style: { position: "relative" } },
+            h(
+              "button",
+              {
+                type: "button",
+                "aria-label": "更多操作",
+                "aria-expanded": moreOpen,
+                title: "刷新 / 新窗口打开",
+                onClick: function () {
+                  setMoreOpen(function (open) { return !open; });
+                },
+                style: {
+                  padding: "5px 9px",
+                  borderRadius: 7,
+                  border: "1px solid " + COLORS.border,
+                  background: "transparent",
+                  color: "inherit",
+                  font: "inherit",
+                  fontSize: 13,
+                  cursor: "pointer",
+                },
+              },
+              "⋯",
+            ),
+            moreOpen
+              ? h(
+                  "div",
+                  {
+                    style: {
+                      position: "absolute",
+                      right: 0,
+                      top: "calc(100% + 6px)",
+                      zIndex: 50,
+                      minWidth: 150,
+                      padding: 4,
+                      borderRadius: 8,
+                      background: "var(--t-card, #fff)",
+                      border: "1px solid " + COLORS.border,
+                      boxShadow: "0 12px 32px rgba(0,0,0,0.18)",
+                    },
+                  },
+                  h(
+                    "button",
+                    {
+                      type: "button",
+                      onClick: function () {
+                        setMoreOpen(false);
+                        reload();
+                      },
+                      style: {
+                        display: "block", width: "100%", textAlign: "left",
+                        padding: "8px 10px", border: 0, borderRadius: 6,
+                        background: "transparent", color: "inherit", font: "inherit", fontSize: 13, cursor: "pointer",
+                      },
+                    },
+                    "刷新排盘页面",
+                  ),
+                  h(
+                    "a",
+                    {
+                      "data-dsh-ziwei-home": "",
+                      href: homeHref,
+                      target: "_blank",
+                      rel: "noreferrer",
+                      onClick: function () { setMoreOpen(false); },
+                      style: {
+                        display: "block", padding: "8px 10px", borderRadius: 6,
+                        color: "inherit", font: "inherit", fontSize: 13, textDecoration: "none",
+                      },
+                    },
+                    "在新窗口打开",
+                  ),
+                )
+              : null,
           ),
         ),
         h("iframe", {

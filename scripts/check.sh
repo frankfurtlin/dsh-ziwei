@@ -9,8 +9,8 @@
 # 它做的事：
 #   1. 静态：node --check（host 半 + client 半 + 验收脚本）、app 的 tsc --noEmit、app 的内核回归测试；
 #   2. 构建：app/npm run build，然后重启 dsh-ziwei-app.service（插件反代的就是它）；
-#   3. 端到端：在 /tmp/dsh-ziwei-check 里起一个**隔离的** DSH 实例（独立 DSH_HOME、独立端口 3099、
-#      独立会话与 cookie），用真实浏览器跑 verify.mjs（47 项）与 app/test-persistence.mjs（16 项），
+#   3. 端到端：在 /tmp/dsh-ziwei-check 里起一个**隔离的** DSH 实例（独立 DSH_HOME、独立端口 3099（被占用时自动顺延）、
+#      独立会话与 cookie），用真实浏览器跑 verify.mjs（47 项）与 app/test-persistence.mjs（29 项），
 #      跑完把实例关掉。生产实例（3080）与你的真实生辰配置全程不被碰。
 #
 # 依赖（本机已有）：
@@ -26,6 +26,12 @@ REAL_HOME="${DSH_HOME:-$HOME/.dsh}"
 CHECK_HOME="${CHECK_HOME:-/tmp/dsh-ziwei-check}"
 PROFILE="${CHECK_PROFILE:-check}"
 PORT="${CHECK_PORT:-3099}"
+# 本机可能同时有别的 agent/实例占着 3099（遇到过）：自动顺延，避免验收实例起不来
+if [[ -z "${CHECK_PORT:-}" ]]; then
+  for candidate in 3099 3100 3101 3102 3103; do
+    if ! ss -ltn 2>/dev/null | grep -q ":$candidate "; then PORT="$candidate"; break; fi
+  done
+fi
 OUT="${CHECK_OUT:-$ROOT/verification/check}"
 DSH_BIN="${DSH_BIN:-$(command -v dsh || true)}"
 
@@ -190,19 +196,27 @@ if (( STATIC_ONLY == 0 )); then
     else
       ok "隔离实例已启动"
       token=$(printf '%s' "$url" | sed -n 's/.*token=\([A-Za-z0-9_-]*\).*/\1/p')
+      # Playwright 依赖的浏览器缓存可能被别的工具升级过（期望的 revision 不在缓存里）：
+      # 本机只要还有任意一个 headless shell，就交给测试脚本兜底，避免整段验收跑不起来。
+      if [[ -z "${DSH_ZIWEI_CHROMIUM:-}" ]]; then
+        candidate=$(ls -d "$HOME"/.cache/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell 2>/dev/null | sort -V | tail -1 || true)
+        [[ -n "$candidate" && -x "$candidate" ]] && export DSH_ZIWEI_CHROMIUM="$candidate"
+      fi
+      # 先跑生辰存储/管理的回归：它更轻，不受模型延迟影响；verify 里有真实模型会话，
+      # 内存紧张时偶发把隔离实例拖死，放在后面，避免连带把这条也跑不成。
+      if node "$APP/test-persistence.mjs" \
+        --url "http://127.0.0.1:$PORT/ziwei/chart" --token "$token" --shots "$OUT/persistence" \
+        >"$OUT/logs/persistence.log" 2>&1; then
+        ok "app/test-persistence.mjs（生辰存储恢复 + 管理：列出全部 / 编辑单条 / 删除单条）"
+      else
+        bad "app/test-persistence.mjs（详见 logs/persistence.log）"
+        grep '^FAIL' "$OUT/logs/persistence.log" 2>/dev/null | sed 's/^/  │ /' | head -10
+      fi
       if node "$ROOT/verify.mjs" --url "$url" --out "$OUT" --ask >"$OUT/logs/verify.log" 2>&1; then
         ok "verify.mjs（面板 / 排盘 / 解读 / 合盘 / 古籍 / 百科 / 分享 / 最近生辰）"
       else
         bad "verify.mjs（详见 $OUT/report.json 与 logs/verify.log）"
         grep '^FAIL' "$OUT/logs/verify.log" 2>/dev/null | sed 's/^/  │ /' | head -10
-      fi
-      if node "$APP/test-persistence.mjs" \
-        --url "http://127.0.0.1:$PORT/ziwei/chart" --token "$token" --shots "$OUT/persistence" \
-        >"$OUT/logs/persistence.log" 2>&1; then
-        ok "app/test-persistence.mjs（生辰服务端存储与恢复）"
-      else
-        bad "app/test-persistence.mjs（详见 logs/persistence.log）"
-        grep '^FAIL' "$OUT/logs/persistence.log" 2>/dev/null | sed 's/^/  │ /' | head -10
       fi
     fi
   fi

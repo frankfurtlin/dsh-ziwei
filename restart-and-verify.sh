@@ -44,6 +44,11 @@ EDGE=$(curl -sk -o /dev/null -w '%{http_code}' --resolve dsh.frankfurtlin.top:44
 echo "[$(date '+%F %T')] 公网 dsh.frankfurtlin.top/ziwei/ 未登录状态码：$EDGE（期望 302/401，404 表示未接通）"
 
 cd "$PLUGIN_DIR" || exit 1
+# Playwright 期望的浏览器 revision 可能已被别的工具升级掉：本机有任意 headless shell 就兜底
+if [ -z "${DSH_ZIWEI_CHROMIUM:-}" ]; then
+  CANDIDATE=$(ls -d "$HOME"/.cache/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell 2>/dev/null | sort -V | tail -1)
+  [ -n "$CANDIDATE" ] && [ -x "$CANDIDATE" ] && export DSH_ZIWEI_CHROMIUM="$CANDIDATE"
+fi
 "$NODE" verify.mjs --url "$URL" --out "$OUT_DIR" --ask
 STATUS=$?
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ZiweiChart } from '@/lib/ziwei/types';
 import ShareCardCanvas, { captureShareCard, downloadDataURL } from './ShareCardCanvas';
@@ -17,6 +17,16 @@ interface ShareModalProps {
 export default function ShareModal({ open, onClose, shareUrl, chart, birth, highlight }: ShareModalProps) {
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
+
+  // Esc 关闭：弹层里有两个滚动区，键盘用户不该只能去找 ×
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
 
   const copyLink = async () => {
     try {
@@ -64,10 +74,13 @@ export default function ShareModal({ open, onClose, shareUrl, chart, birth, high
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="分享命盘"
             onClick={e => e.stopPropagation()}
             className="rounded-2xl overflow-hidden"
             style={{
-              background: 'white',
+              background: 'var(--t-card, #fff)',
               maxWidth: '680px',
               width: '100%',
               maxHeight: '92vh',
@@ -84,9 +97,9 @@ export default function ShareModal({ open, onClose, shareUrl, chart, birth, high
               <div style={{ fontSize: '14px', fontWeight: 600, color: '#3d2f10', letterSpacing: '0.12em' }}>
                 ✦ 分享命盘
               </div>
-              <button onClick={onClose}
+              <button onClick={onClose} aria-label="关闭"
                 style={{
-                  width: '28px', height: '28px', borderRadius: '50%', border: 'none',
+                  width: '28px', height: '28px', borderRadius: '50%', border: '1px solid var(--zw-line)',
                   background: 'rgba(0,0,0,0.05)', color: '#666', fontSize: '16px',
                   cursor: 'pointer', lineHeight: 1,
                 }}
@@ -109,10 +122,10 @@ export default function ShareModal({ open, onClose, shareUrl, chart, birth, high
               <button onClick={downloadImage} disabled={downloading}
                 style={{
                   padding: '14px', borderRadius: '10px', border: 'none',
-                  background: 'linear-gradient(135deg, #d4a948 0%, #b8922a 100%)',
-                  color: 'white', fontSize: '14px', fontWeight: 600, letterSpacing: '0.15em',
+                  background: '#7a5c10',
+                  color: '#fffaf0', fontSize: '14px', fontWeight: 600, letterSpacing: '0.15em',
                   cursor: downloading ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 4px 12px rgba(184,146,42,0.3)',
+                  boxShadow: 'none',
                   opacity: downloading ? 0.7 : 1,
                 }}
               >

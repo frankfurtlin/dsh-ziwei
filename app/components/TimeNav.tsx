@@ -31,10 +31,10 @@ export function buildSiHuaOverlay(stemIndex: number): Record<string, string> {
 }
 
 const SIHUA_COLORS: Record<string, string> = {
-  '禄': '#4ade80',
-  '权': '#60a5fa',
-  '科': '#facc15',
-  '忌': '#f87171',
+  '禄': 'var(--zw-lu)',
+  '权': 'var(--zw-quan)',
+  '科': 'var(--zw-ke)',
+  '忌': 'var(--zw-ji)',
 };
 
 export default function TimeNav({
@@ -101,10 +101,10 @@ export default function TimeNav({
           className="relative flex-1 flex items-center justify-center rounded-lg py-1.5 gap-1 transition-all duration-200"
           style={{
             background: view === 'liunian'
-              ? 'rgba(212,168,67,0.12)'
+              ? 'var(--zw-gold-bg)'
               : 'transparent',
             border: view === 'liunian'
-              ? '1px solid rgba(212,168,67,0.25)'
+              ? '1px solid var(--zw-gold-line)'
               : '1px solid transparent',
           }}
         >

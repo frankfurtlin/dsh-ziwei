@@ -13,7 +13,7 @@ DSH 插件（`dsh-ziwei`）在宿主里注册一个侧栏面板 + 一个 `/ziwei
 ┌─ DSH 宿主进程（node dsh --profile web，127.0.0.1:3080）────────────────┐
 │                                                                        │
 │  client 半（浏览器）        client.js                                  │
-│    ├─ slots 注册 sidebar.panellist（order 20）→ 侧栏「紫微斗数」        │
+│    ├─ slots 注册 sidebar.panellist（order 16）→ 侧栏「紫微斗数」        │
 │    └─ slots 注册 main(key=ziwei)  → 面板页：四个视图 + iframe + 工具条  │
 │                                                                        │
 │  host 半（node）            lib/index.js                               │
@@ -67,7 +67,7 @@ ctx.get('connection', false)?.requestRejection(req)   // 403 不可信 Host/Orig
 
 | 数据 | 位置 | 权限 | 谁写 |
 | --- | --- | --- | --- |
-| 生辰（当前 + 最近 20 条历史） | `~/.dsh/ziwei/birth.json` | 0600 | `lib/birth-store.js` |
+| 生辰（当前 + 最近 20 条历史；接口按 `id` 定位单条） | `~/.dsh/ziwei/birth.json` | 0600 | `lib/birth-store.js` |
 | 模型凭据 | `~/.dsh/.credentials.yaml`（DSH 自己的） | 0600 | DSH；插件不碰 |
 | 面板视图/主题偏好 | 只在前端内存，不落盘 | — | — |
 | 验收截图与报告 | `verification/`（gitignore） | — | `verify.mjs` |

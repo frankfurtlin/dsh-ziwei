@@ -38,7 +38,14 @@ function check(name, ok, detail) {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`)
 }
 
-const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] })
+// Playwright 自带的 Chromium 版本可能与本机缓存不一致（缓存被其它工具升级/清理过），
+// 允许 DSH_ZIWEI_CHROMIUM 指定一个可执行的 headless shell 兜底；不设则用默认。
+const chromiumExecutable = process.env.DSH_ZIWEI_CHROMIUM || undefined
+const browser = await chromium.launch({
+  headless: true,
+  args: ['--no-sandbox'],
+  ...(chromiumExecutable ? { executablePath: chromiumExecutable } : {}),
+})
 try {
   await mkdir(outDir, { recursive: true })
 
@@ -125,9 +132,13 @@ try {
   const indexSchedule = sidebarText.indexOf('Automation tasks')
   const indexSkill = sidebarText.indexOf('Skill Center')
   check('侧栏出现「紫微斗数」入口', indexZiwei !== -1)
+  // 新版外壳不一定还有「Skill Center」这个分组（更好用的侧栏插件接管后就没有了）：
+  // 有它就仍要求排在它前面，没有就退化为「排在 Automation tasks 之后」。
   check(
-    '入口位于「Automation tasks」与「Skill Center」之间',
-    indexSchedule !== -1 && indexSkill !== -1 && indexSchedule < indexZiwei && indexZiwei < indexSkill,
+    indexSkill === -1
+      ? '入口排在「Automation tasks」之后（外壳没有 Skill Center 分组）'
+      : '入口位于「Automation tasks」与「Skill Center」之间',
+    indexSchedule !== -1 && indexSchedule < indexZiwei && (indexSkill === -1 || indexZiwei < indexSkill),
     `schedule=${indexSchedule} ziwei=${indexZiwei} skill=${indexSkill}`,
   )
 
@@ -359,7 +370,7 @@ try {
     check('切换「感情」标签会重新生成对应解读', /【感情格局】/.test(love), `sections=${(love.match(/【[^】]+】/g) || []).length}`)
 
     // 追问：必须走真实点击，force 会绕过命中测试、测不出被浮层遮挡
-    await frame.locator('input[placeholder*="继续追问"]').fill('今年适合换工作吗？')
+    await frame.locator('input[placeholder*="问一句"]').fill('今年适合换工作吗？')
     const petBox = await page.locator('[aria-label="pet"]').first().boundingBox().catch(() => null)
     const iframeBox = await page.locator('iframe[title="紫微斗数排盘"]').boundingBox().catch(() => null)
     const realFrame = page.frames().find((item) => item.url().includes('/ziwei/'))
@@ -464,9 +475,10 @@ try {
       check('「最近生辰」入口存在', false, '没有找到 [data-ziwei-recent]')
     }
 
-    // ── 8.6 复制盘面摘要（方便直接贴进 DSH 会话）──
+    // ── 8.6 复制盘面摘要（方便直接贴进 DSH 会话；收在「⋯」菜单里）──
+    await frame.locator('[data-ziwei-more]').click()
     const copyButton = frame.locator('[data-ziwei-copy]')
-    check('工具条有「复制盘面摘要」按钮', (await copyButton.count()) > 0)
+    check('「⋯」菜单里有「复制盘面摘要」', (await copyButton.count()) > 0)
     await copyButton.click()
     await page.waitForTimeout(600)
     const copiedText = await page.evaluate(() => navigator.clipboard.readText().catch(() => ''))
@@ -548,7 +560,14 @@ try {
     const knowledgeUrl = await switchPanelView('knowledge', '/ziwei/knowledge')
     check('面板能切到「百科」', knowledgeUrl.includes('/ziwei/knowledge'), knowledgeUrl)
     const innerPage = page.frames().find((item) => item.url().includes('/ziwei/'))
-    const knowledgeText = await innerPage?.locator('body').innerText().catch(() => '')
+    // 切换视图是异步导航：给内嵌页最多 15s 把正文渲染出来，避免偶发读到空白就判失败
+    let knowledgeText = ''
+    const knowledgeDeadline = Date.now() + 15000
+    while (Date.now() < knowledgeDeadline) {
+      knowledgeText = await innerPage?.locator('body').innerText().catch(() => '')
+      if ((knowledgeText || '').length > 200) break
+      await page.waitForTimeout(300)
+    }
     check('百科页在内嵌环境里渲染出内容', (knowledgeText || '').length > 200, `len=${(knowledgeText || '').length}`)
     await page.screenshot({ path: path.join(outDir, '09-panel-knowledge.png') })
     const backUrl = await switchPanelView('chart', '/ziwei/chart')
