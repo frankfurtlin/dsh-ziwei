@@ -91,16 +91,16 @@ export default function ShareModal({ open, onClose, shareUrl, chart, birth, high
             {/* 顶部标题 */}
             <div style={{
               padding: '14px 18px',
-              borderBottom: '1px solid rgba(184,146,42,0.15)',
+              borderBottom: '1px solid var(--zw-line)',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             }}>
-              <div style={{ fontSize: '14px', fontWeight: 600, color: '#3d2f10', letterSpacing: '0.12em' }}>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--zw-ink)', letterSpacing: '0.12em' }}>
                 ✦ 分享命盘
               </div>
               <button onClick={onClose} aria-label="关闭"
                 style={{
                   width: '28px', height: '28px', borderRadius: '50%', border: '1px solid var(--zw-line)',
-                  background: 'rgba(0,0,0,0.05)', color: '#666', fontSize: '16px',
+                  background: 'var(--t-surface)', color: 'var(--zw-ink-3)', fontSize: '16px',
                   cursor: 'pointer', lineHeight: 1,
                 }}
               >×</button>
@@ -122,7 +122,7 @@ export default function ShareModal({ open, onClose, shareUrl, chart, birth, high
               <button onClick={downloadImage} disabled={downloading}
                 style={{
                   padding: '14px', borderRadius: '10px', border: 'none',
-                  background: '#7a5c10',
+                  background: 'var(--zw-ink)',
                   color: '#fffaf0', fontSize: '14px', fontWeight: 600, letterSpacing: '0.15em',
                   cursor: downloading ? 'not-allowed' : 'pointer',
                   boxShadow: 'none',
@@ -135,8 +135,8 @@ export default function ShareModal({ open, onClose, shareUrl, chart, birth, high
               <button onClick={copyLink}
                 style={{
                   padding: '14px', borderRadius: '10px',
-                  border: '1px solid rgba(184,146,42,0.4)', background: 'white',
-                  color: '#b8922a', fontSize: '14px', fontWeight: 500, letterSpacing: '0.12em',
+                  border: '1px solid var(--zw-gold-line)', background: 'var(--t-card)',
+                  color: 'var(--zw-gold)', fontSize: '14px', fontWeight: 500, letterSpacing: '0.12em',
                   cursor: 'pointer',
                 }}
               >
@@ -144,11 +144,11 @@ export default function ShareModal({ open, onClose, shareUrl, chart, birth, high
               </button>
 
               <div style={{
-                fontSize: '11px', color: '#a89b7c', lineHeight: 1.7,
-                padding: '10px 12px', background: 'rgba(184,146,42,0.05)',
+                fontSize: '11px', color: 'var(--zw-ink-3)', lineHeight: 1.7,
+                padding: '10px 12px', background: 'var(--zw-gold-bg)',
                 borderRadius: '8px', marginTop: '4px',
               }}>
-                <div style={{ marginBottom: '4px', fontWeight: 600, color: '#8b6a14' }}>使用提示：</div>
+                <div style={{ marginBottom: '4px', fontWeight: 600, color: 'var(--zw-gold)' }}>使用提示：</div>
                 · 下载图片可发朋友圈 / 抖音 / 小红书<br />
                 · 复制链接发给好友，对方点开直接看到这张盘
               </div>

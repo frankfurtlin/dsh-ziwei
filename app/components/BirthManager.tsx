@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import BirthForm from '@/components/BirthForm';
 import type { BirthFormState } from '@/components/BirthForm';
-import { birthLabel, toBirthPrefill } from '@/lib/birth-label';
+import { birthLabel, recordKey, toBirthPrefill } from '@/lib/birth-label';
 import type { BirthPrefill } from '@/lib/birth-label';
 import type { StoredBirth } from '@/lib/birth-storage';
 import type { BirthInfo } from '@/lib/ziwei/types';
@@ -218,7 +218,7 @@ export default function BirthManager({
               </div>
             )}
             <BirthForm
-              key={editing.record.id || editing.record.savedAt || 'edit'}
+              key={recordKey(editing.record)}
               initialData={editing.prefill.initial}
               onSubmit={submitEdit}
               onFormSave={(data) => {
@@ -235,11 +235,11 @@ export default function BirthManager({
                 还没有保存过生辰。
               </div>
             ) : (
-              records.map((record, index) => {
+              records.map((record) => {
                 const isCurrent = Boolean(record.id) && record.id === currentId;
                 return (
                   <div
-                    key={record.id || `${record.savedAt}-${index}`}
+                    key={recordKey(record)}
                     data-ziwei-manager-item
                     data-id={record.id}
                     className="zw-row"

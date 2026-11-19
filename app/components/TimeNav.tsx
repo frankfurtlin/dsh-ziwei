@@ -182,9 +182,9 @@ function TabButton({
       onClick={onClick}
       className="flex-1 py-1.5 text-[10px] font-medium rounded-lg transition-all duration-200"
       style={{
-        background: active ? 'rgba(212,168,67,0.12)' : 'transparent',
-        color: active ? 'var(--t-gold)' : 'var(--t-faint)',
-        border: active ? '1px solid rgba(212,168,67,0.25)' : '1px solid transparent',
+        background: active ? 'var(--zw-gold-bg)' : 'transparent',
+        color: active ? 'var(--zw-gold)' : 'var(--t-faint)',
+        border: active ? '1px solid var(--zw-gold-line)' : '1px solid transparent',
       }}
     >
       {children}

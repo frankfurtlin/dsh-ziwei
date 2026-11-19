@@ -86,3 +86,10 @@ export function toBirthPrefill(record: StoredBirth): BirthPrefill {
     },
   };
 }
+
+/** 列表/菜单的稳定 key：优先用服务端 id，旧记录退化为出生信息。 */
+export function recordKey(record: StoredBirth): string {
+  if (record.id) return record.id;
+  const info = record.info;
+  return `${info.year}-${info.month}-${info.day}-${info.hour}-${info.gender}-${info.name ?? ''}`;
+}

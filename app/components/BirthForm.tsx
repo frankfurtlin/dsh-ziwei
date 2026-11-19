@@ -3,7 +3,6 @@ import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { BirthInfo } from '@/lib/ziwei/types';
 import { SHICHEN } from '@/lib/ziwei/constants';
-import { useTheme } from '@/components/ThemeProvider';
 import { PROVINCES } from '@/lib/ziwei/cities';
 
 export interface BirthFormState {
@@ -50,9 +49,6 @@ function isValidDate(y: number, m: number, d: number): boolean {
 }
 
 export default function BirthForm({ onSubmit, loading, initialData, onFormSave, hideSubmit, submitLabel }: BirthFormProps) {
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
-
   const [form, setForm] = useState<BirthFormState>({
     name: initialData?.name ?? '',
     year: initialData?.year ?? '',
@@ -116,7 +112,6 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
     form.unknownTime || (!!form.clockHour && !!form.clockMinute),
     true, // 性别有默认值
   ];
-  const completedSteps = steps.filter(Boolean).length;
 
   // ─── Summary chip：全部必填完成后显示 ───────────────────
   const showSummary = steps[0] && steps[2] && !hasError;
@@ -153,7 +148,6 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
   // ─── 样式变量 ────────────────────────────────────────────
   const bg = 'var(--t-card)';
   const border = 'var(--zw-line)';
-  const labelClr = 'var(--zw-ink-3)';
   const inputBg = 'var(--t-surface)';
   const inputBorder = 'var(--zw-line)';
   const inputClr = 'var(--zw-ink)';
@@ -410,7 +404,6 @@ export default function BirthForm({ onSubmit, loading, initialData, onFormSave, 
           {(['male', 'female'] as const).map(g => {
             const active = form.gender === g;
             const isMale = g === 'male';
-            const accent = isMale ? '37,99,235' : '225,29,72';
             return (
               <motion.button
                 key={g}

@@ -290,12 +290,10 @@ export default function HemingPage() {
               </div>
               <button
                 onClick={() => runAnalysis()}
+                className="zw-btn zw-btn-primary"
                 style={{
-                  padding: '14px 40px', borderRadius: 'var(--r-pill)', border: 'none',
-                  background: 'linear-gradient(135deg, #9a6210, #c88020)',
-                  color: '#fff8e8', fontSize: '14px', fontWeight: 600,
-                  letterSpacing: '0.15em', cursor: 'pointer',
-                  boxShadow: '0 4px 16px rgba(140,100,20,0.25)',
+                  height: 'auto', padding: '13px 40px', borderRadius: 'var(--r-pill)',
+                  fontSize: '14px', fontWeight: 600, letterSpacing: '0.15em',
                   transition: 'transform 0.15s',
                 }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)'; }}

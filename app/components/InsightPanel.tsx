@@ -415,7 +415,7 @@ export default function InsightPanel({
           ),
         )}
         {error && (
-          <p style={{ marginTop: 8, fontSize: 12, lineHeight: 1.7, color: '#A83228' }}>{error}</p>
+          <p style={{ marginTop: 8, fontSize: 12, lineHeight: 1.7, color: 'var(--zw-danger)' }}>{error}</p>
         )}
       </div>
 
@@ -463,7 +463,7 @@ export default function InsightPanel({
               flexShrink: 0,
               minWidth: 56,
               border: '1px solid var(--t-border-acc)',
-              background: loading || !input.trim() ? 'transparent' : 'rgba(184,146,42,0.10)',
+              background: loading || !input.trim() ? 'transparent' : 'var(--zw-gold-bg)',
               color: loading || !input.trim() ? 'var(--t-faint)' : 'var(--t-gold)',
               cursor: loading || !input.trim() ? 'default' : 'pointer',
             }}

@@ -72,7 +72,6 @@
   --zw-quan: #1f4f8f;
   --zw-ke: #7a5c10;
   --zw-ji: #93342a;
-  --zw-touch: 40px;
 }
 
 /* ─── 暗色模式 Token 覆盖 ──────────────────────────────── */
@@ -110,11 +109,6 @@
   --board-shadow: 0 4px 32px rgba(0,0,0,0.45);
 
   /* 星曜语义色（暗色底） */
-  --star-bright: #FCD34D;
-  --star-normal: #F59E0B;
-  --star-dim:    rgba(180,83,9,0.8);
-  --star-lucky:  rgba(56,189,248,0.7);
-  --star-sha:    rgba(248,113,113,0.6);
 }
 
 /* ─── 浅色模式补充 Token（命盘品牌色/网格线，与 DSH 白底一致） ─── */
@@ -133,11 +127,6 @@
   --t-gold:       #7A5C10;
 
   /* 星曜语义色（浅色底要压深，否则在白色上发飘） */
-  --star-bright: #8A5A00;
-  --star-normal: #A87514;
-  --star-dim:    rgba(160,120,30,0.9);
-  --star-lucky:  rgba(26,86,168,0.85);
-  --star-sha:    rgba(168,50,40,0.8);
 }
 
 
@@ -622,11 +611,6 @@ body {
   --t-border:     rgba(255,255,255,0.16);
   --t-gold:       #d9b45a;
   --t-border-acc: rgba(217,180,90,0.40);
-  --star-bright:  #f2cf70;
-  --star-normal:  #e0b458;
-  --star-dim:     rgba(196,150,90,0.75);
-  --star-lucky:   #7fb6d8;
-  --star-sha:     #e08a7f;
 }
 
 /* ─── 3.0 控件：工具条 / 菜单 / 概览条 ─────────────────────── */

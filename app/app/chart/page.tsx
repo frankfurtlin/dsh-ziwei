@@ -21,7 +21,7 @@ import {
   saveBirth,
   updateBirth,
 } from '@/lib/birth-storage';
-import { birthLabel } from '@/lib/birth-label';
+import { birthLabel, recordKey } from '@/lib/birth-label';
 import { formToBirthInfo } from '@/lib/ziwei/share';
 import type { StoredBirth } from '@/lib/birth-storage';
 import type { BirthInfo, ZiweiChart, Palace, Star } from '@/lib/ziwei/types';
@@ -348,9 +348,9 @@ export default function ChartPage() {
               marginBottom: 16,
               padding: '10px 12px',
               borderRadius: 10,
-              border: '1px solid rgba(168,50,40,0.35)',
-              background: 'rgba(168,50,40,0.08)',
-              color: '#A83228',
+              border: '1px solid color-mix(in srgb, var(--zw-danger) 35%, transparent)',
+              background: 'color-mix(in srgb, var(--zw-danger) 8%, transparent)',
+              color: 'var(--zw-danger)',
               fontSize: 13,
               lineHeight: 1.6,
             }}
@@ -363,7 +363,7 @@ export default function ChartPage() {
             <span style={{ fontSize: 12, color: 'var(--t-faint)' }}>最近用过：</span>
             {records.slice(0, 4).map((item) => (
               <button
-                key={item.id || `${item.info.year}-${item.info.month}-${item.info.day}-${item.info.hour}-${item.info.gender}-${item.info.name ?? ''}`}
+                key={recordKey(item)}
                 type="button"
                 data-ziwei-recent-item
                 onClick={() => applyStored(item)}
@@ -480,7 +480,7 @@ export default function ChartPage() {
               <div data-ziwei-recent-list className="zw-menu" role="menu">
                 {records.slice(0, 5).map((item) => (
                   <button
-                    key={item.id || `${item.info.year}-${item.info.month}-${item.info.day}-${item.info.hour}-${item.info.gender}-${item.info.name ?? ''}`}
+                    key={recordKey(item)}
                     type="button"
                     role="menuitem"
                     onClick={() => applyStored(item)}
