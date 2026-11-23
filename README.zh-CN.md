@@ -4,11 +4,8 @@
 
 **DSH 里的紫微斗数排盘面板：本地起盘，盘面直接交给 DSH Agent 解读。**
 
-A Zi Wei Dou Shu chart panel inside DSH — cast the chart locally, then hand it to the DSH agent to read.
-
 [![Version](https://img.shields.io/badge/version-0.1.0-blue)](package.json)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Platform](https://img.shields.io/badge/DSH-DeepSeek%20Harness-5b5ef7)](https://github.com/frankfurtlin/dsh-pocket)
 
 [English](README.md) · **简体中文**
 
