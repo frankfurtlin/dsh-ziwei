@@ -10,7 +10,7 @@ A Zi Wei Dou Shu chart panel for DSH: cast the chart locally, then hand it to th
 
 [中文](README.md) · [English](README.en.md)
 
-![Chart panel](verification/prod/02-panel.png)
+![Chart panel](docs/screenshots/hero.png)
 
 ## What it is
 

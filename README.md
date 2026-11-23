@@ -14,7 +14,7 @@ A Zi Wei Dou Shu chart panel inside DSH — cast the chart locally, then hand it
 
 </div>
 
-![排盘面板](verification/prod/02-panel.png)
+![排盘面板](docs/screenshots/hero.png)
 
 ## 这是什么
 
