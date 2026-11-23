@@ -1,347 +1,88 @@
-<div align="center">
+# dsh-ziwei
 
-# dsh-ziwei 「紫微斗数」
+Zi Wei Dou Shu (紫微斗数) charting inside DSH: cast a chart locally, then hand the whole chart to the agent instead of retyping it into another window.
 
-**DSH 里的紫微斗数排盘面板：本地起盘，盘面直接交给 DSH Agent 解读。**
-
-A Zi Wei Dou Shu chart panel inside DSH — cast the chart locally, then hand it to the DSH agent to read.
+**English** · [简体中文](README.zh-CN.md)
 
 [![Version](https://img.shields.io/badge/version-0.1.0-blue)](package.json)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Platform](https://img.shields.io/badge/DSH-DeepSeek%20Harness-5b5ef7)](https://github.com/frankfurtlin/dsh-pocket)
 
-[中文](README.md) · [English](README.en.md)
+![Chart panel](docs/screenshots/hero.png)
 
-</div>
+## The problem
 
-![排盘面板](docs/screenshots/hero.png)
+A chart and a reading used to live in two windows. You cast the chart on a site, then copied palaces and star names into a chat by hand, and whatever you forgot stayed behind.
 
-## 这是什么
+This plugin serves the chart app behind the DSH login and lets the chart travel by `postMessage` to the panel's toolbar. **让 DSH 解读** writes the full digest into a new session's composer, so the follow-up questions happen in the same conversation.
 
-紫微斗数插件把原来独立的排盘站点收进 DSH：侧栏「插件」组里多一行入口，点开是内嵌的同源 iframe，跑本机 `127.0.0.1:8815` 上的 Next.js 排盘应用，只有 DSH 登录用户能访问。起盘、生辰记忆、合盘、古籍、百科都在这一页里；右侧「命理解读」由宿主当前默认模型生成，不需要再配第二份 API Key。
+## Quick example
 
-它解决的问题是盘面和对话原本割裂：排盘在一个站点，解读在另一个对话窗口，中间靠复制粘贴。现在盘面摘要通过 `postMessage` 交给插件工具条，点「让 DSH 解读」就把完整命盘写进新会话的输入框，可以接着追问。
+```
+DSH sidebar → 插件 → 紫微斗数              one new row
 
-## 功能
+  排盘 · 合盘 · 古籍 · 百科               toolbar, switches the embedded view
+  ┌────────────────────────────┬──────────────────┐
+  │ birth form + 4×4 palace    │ 命理解读          │
+  │ chart, fills the panel     │ six tabs, SSE     │
+  └────────────────────────────┴──────────────────┘
 
-- **排盘**：公历 / 农历、时辰、性别、真太阳时，4×4 宫位命盘，纵向撑满面板高度。
-- **命理解读**：`/ziwei/ai` 走宿主模型的 SSE 流式接口，六个 tab（命格 / 感情 / 事业 / 财运 / 健康 / 性格）+ 底部追问。
-- **交给 Agent**：「让 DSH 解读」把盘面摘要插入宿主草稿并新开会话，失败时退到剪贴板兜底。
-- **生辰记忆**：生辰存在服务端 `$DSH_HOME/ziwei/birth.json`（0600），换浏览器 / 换设备都能恢复，最多保留 20 条。
-- **生辰管理**：列出全部记录、编辑单条、删除单条、清空；「忘记」只清当前盘。
-- **四个视图**：排盘 / 合盘 / 古籍 / 百科，切换时重建 iframe 并同步主题。
-- **盘面零件**：命盘概览抽屉、点星看解释（古籍原文 + 现代解读）、分享卡与带生辰参数的链接。
-- **可验收**：`verify.mjs` 47 项 + `app/test-persistence.mjs` 32 项真实浏览器验收（含手机端 390×844）。
+让 DSH 解读 → a new session whose composer already holds the chart digest
+```
 
-## 安装
+## Install
 
 ```bash
-# 1) 排盘应用：装依赖、构建，由 systemd 单元跑在 127.0.0.1:8815
+# 1) the chart app: build it, then run it under its unit on 127.0.0.1:8815
 cd app && npm install && npm run build
 systemctl restart dsh-ziwei-app.service
 
-# 2) 插件：插件页 → 添加插件 → 填本仓库绝对路径 → 安装 → 打开开关 → 刷新页面
-#    等价手工：profile package.json 加 "dsh-ziwei": "link:/root/workspace/plugins/dsh-ziwei"，
-#    dsh.profile.bundles 末尾加 "dsh-ziwei"，再把 node_modules/dsh-ziwei 链到本目录
+# 2) the plugin: Plugins page → Add plugin → this repo's absolute path → Install →
+#    enable the switch → reload. The manual equivalent is adding
+#    "dsh-ziwei": "link:/root/workspace/plugins/dsh-ziwei" to the profile's dependencies,
+#    appending "dsh-ziwei" to dsh.profile.bundles, then linking it into node_modules.
 ```
 
-## 详细文档
+The app must be built with `basePath: '/ziwei'` and `NEXT_PUBLIC_BASE_PATH=/ziwei` (both already set); a mismatch between either of those and the proxy prefix gives an unstyled page inside the iframe.
 
-下面几节是完整说明。
+## Usage
 
-把一个紫微斗数排盘应用装进 DSH：侧栏「插件」组里，**Automation tasks** 下面多一行
-**紫微斗数**，点开就是排盘主页面，不用再走公网域名；盘面可以直接交给 DSH 的 Agent 解读。
+Open **紫微斗数** under the plugin group. Choose a Gregorian or lunar date, birth hour, gender and true solar time, then cast; the chart fills the panel and the reading panel on the right streams into six tabs (命格 / 感情 / 事业 / 财运 / 健康 / 性格) with a follow-up box underneath.
 
-排盘应用（原来的独立站点 `workspace/ziwei-doushu`）已经整体收进本仓库的 `app/`，
-现在只有这一个插件版本，独立部署的那份不再存在。
+- **让 DSH 解读** starts a new session with the digest in the composer; if the insertion fails, the digest is on the clipboard.
+- Birth data is remembered server-side — **生辰 N ▾** lists the last five, and the birth manager lists, edits or deletes any record.
+- **Share** renders a card and a link that carries the birth parameters (`?b=1990-6-15-5&g=m`); the link outranks stored data and is never written back to it.
+- Restoring a chart deliberately does not call the model: pick a tab when you want a reading.
 
-- 侧栏顺序：Automation tasks(10) → **紫微斗数(16)** → Skill Center(30)
-- 公网入口（`hermes.frankfurtlin.top/ziwei/`）已于 2026-11-03 撤掉，现在只能通过 DSH 登录态访问
-- 插件目录：`/root/workspace/plugins/dsh-ziwei`，注册在 `/root/.dsh/profiles/web/package.json`
-- 应用目录：本仓库 `app/`，由 `dsh-ziwei-app.service` 跑在 `127.0.0.1:8815`
+## Configuration
 
-## 改完代码先自检
+| Setting | Default | What it controls |
+| --- | --- | --- |
+| `DSH_ZIWEI_BIRTH_FILE` | `$DSH_HOME/ziwei/birth.json` | server-side birth store, created with mode `0600` |
+| `DSH_ZIWEI_UPSTREAM_PORT` | `8815` | loopback port the `/ziwei` proxy targets |
+| `DSH_ZIWEI_AI_REASONING` | `low` | reasoning effort for readings (`off`/`minimal`/`low`/`medium`/`high`); low is what keeps the first token inside 90 seconds |
+| `DSH_ZIWEI_AI_DEBUG` | unset | set to `1` to log the SSE chunks of a reading |
+| `DSH_HOME` | `~/.dsh` | parent directory of the birth store |
+| `NEXT_PUBLIC_BASE_PATH` | `/ziwei` | build-time base path of the app; must match the proxy prefix |
 
-```bash
-scripts/check.sh            # 全套：静态 + 构建 + 隔离实例端到端（约 2–3 分钟）
-scripts/check.sh --static   # 只静态：语法 / 类型 / 内核回归（约 40 秒）
-scripts/install-hooks.sh    # 装 pre-commit，静态不过就提交不了
-```
+There is no second API key: readings go through `ctx.llm.stream()` with whichever model DSH already has selected, billed to that quota. The app's own `AI_*` variables and `/api/interpret` are gone, and leftovers in `.env.local` are harmless.
 
-它会在 `/tmp/dsh-ziwei-check` 起一个独立 DSH 实例（独立端口与会话，不碰生产），
-用真实浏览器把面板、排盘、解读、合盘、古籍、百科、分享、最近生辰全部走一遍，
-结果写 `verification/check/`。细节见 [docs/testing.md](docs/testing.md)。
+## What it doesn't do
 
-## 文档
+- It needs the companion Next.js app running on `127.0.0.1:8815`. Without it the panel renders an empty frame.
+- It has no authentication of its own. `/ziwei/*` sits behind the DSH login gate (401 without a session), other paths stay 404, and the app is not reachable without that login.
+- There is exactly one reading path: the plugin's `/ziwei/ai` → the host's default model, on your quota. The app's old `/api/interpret` is gone, so there is no second configuration to tune.
+- **让 DSH 解读** needs at least one Workspace and relies on the browser's `execCommand` for draft insertion; when that fails the digest falls back to the clipboard.
+- Restoring a saved birth restores the chart only — no reading is generated until you ask for one.
+- Birth data is one JSON file for this install (`0600`): no multi-user separation and no sync between machines.
 
-| 文档 | 内容 |
-| --- | --- |
-| [docs/README.md](docs/README.md) | 文档索引、30 秒速览、改代码前必看的三条 |
-| [docs/architecture.md](docs/architecture.md) | 两层结构、请求链路与鉴权、三个入口分工、数据落盘、面板座位与 `postMessage` 协议 |
-| [docs/api.md](docs/api.md) | `/ziwei/ai`（SSE 协议、限制、错误码）与 `/ziwei/birth`（配置读写）的完整接口 |
-| [docs/app-map.md](docs/app-map.md) | 应用能力地图：路由、排盘页五段结构、布局约束、组件与内核模块清单、主题 token、回归测试 |
-| [docs/testing.md](docs/testing.md) | **自检与验收**：`scripts/check.sh` 一键跑静态 + 构建 + 隔离实例端到端，47+32 项分别验什么、常见坑 |
-| [docs/deploy.md](docs/deploy.md) | 服务单元、注册方式、改什么重启什么、构建、验收命令、测试实例、回滚、故障排查 |
-| [docs/changelog.md](docs/changelog.md) | 从独立站点到插件的演进与踩过的坑 |
-| [docs/design-review.md](docs/design-review.md) | **设计评审**：视觉层级、字阶、语义色、对比度、组件一致性与优化顺序 |
+## Docs
 
-## 它由哪几块组成
+Full design notes are in the Chinese README ([README.zh-CN.md](README.zh-CN.md)), and the long-form pages are under `docs/`: architecture and the proxy/auth chain, the `/ziwei/ai` SSE and `/ziwei/birth` API, the app capability map, testing and acceptance, deployment and rollback, the changelog, and a design review.
 
-| 文件 | 作用 |
-| --- | --- |
-| `package.json` | 声明 `dsh.bundle.patch`（cordis patch）、`dsh.client.platform=web`、`exports["./client"]` |
-| `cordis.patch.yml` | `- insert: [{id: dsh-ziwei, name: dsh-ziwei}]`，id 必须等于包名 |
-| `lib/index.js` | host 半：注册 `prefix /ziwei` 反向代理 → `http://127.0.0.1:8815`，先过 DSH 自己的登录闸门；`/ziwei/ai`（模型解读）与 `/ziwei/birth`（生辰配置）走自己的 handler |
-| `lib/ai.js` | host 半：解读接口，用 `ctx.llm.stream()` 调宿主模型，SSE 流式回吐 |
-| `lib/birth-store.js` | host 半：生辰的服务端存储，读写 `$DSH_HOME/ziwei/birth.json`（0600） |
-| `client.js` | client 半：注册侧栏行（panellist 座位）+ 主面板（main 座位，keyed=`ziwei`）；面板顶部分段控件切换排盘/合盘/古籍/百科四个视图，内嵌同源 iframe |
-| `verify.mjs` | 真实浏览器验收（playwright，47 项），默认打测试实例，可指定生产地址 |
-| `app/test-persistence.mjs` | 生辰服务端存储、恢复与管理的验收（playwright，32 项，含手机端 390×844 布局） |
-| `scripts/check.sh` | **改完代码跑这个**：静态检查 + 构建重启 + 隔离实例上跑上面两个脚本 |
-| `scripts/install-hooks.sh` | 装 pre-commit（只跑静态检查，约 40 秒） |
-| `restart-and-verify.sh` | 生产重启 + 自动验收，脱离当前会话执行（见下） |
+## Contributing
 
-### 解读只走 DSH
+`npm run check` is the fast gate; `scripts/check.sh` adds a build and a full end-to-end run in a throwaway DSH instance (2–3 minutes, production untouched), and `scripts/install-hooks.sh` wires the static check into a pre-commit hook. Commits follow Conventional Commits with a Chinese summary.
 
-排盘应用自带的 AI 面板（`InsightPanel` / `ChatPanel` / `app/api/interpret`）已经删除——
-既然做成插件，解读就用宿主的能力：盘面摘要通过 `postMessage` 交给插件工具条的
-「让 DSH 解读」，由 DSH Agent 出解读并支持继续追问。因此：
+## License
 
-- 排盘页只剩「命盘」本体，单栏铺满；
-- 应用里只剩排盘所需的纯前端代码，不再需要任何 `AI_*` 环境变量（`.env.local` 里的旧键可以留着不管，删掉也不影响）。
-
-### 生辰记忆（服务端配置文件）
-
-输入过一次生辰后，下次打开排盘页会自动恢复上次的盘，不用重填：
-
-- 存在宿主上的配置文件里：`~/.dsh/ziwei/birth.json`（即 `$DSH_HOME/ziwei/birth.json`，
-  可用 `DSH_ZIWEI_BIRTH_FILE` 覆盖），文件权限 `0600`。结构：
-  ```json
-  { "version": 1,
-    "current": { "savedAt": "...", "info": { "year": 1990, "month": 6, "day": 15, "hour": 5, "gender": "male" }, "form": { "...": "表单原始快照" } },
-    "history": [ { "savedAt": "...", "info": { }, "form": { } } ] }
-  ```
-  `current` 用来恢复命盘，`history` 保留最近 20 次不同的人生辰（同一个人重复起盘只留一条）。
-- 每条记录在接口响应里带 `id`（由出生信息推导的稳定值，文件里不写、旧文件不用迁移），
-  用来定位单条记录做编辑和删除。
-- 读写走同源接口 `GET/POST/PATCH/DELETE /ziwei/birth`（单条是 `/ziwei/birth/:id`），
-  和 `/ziwei/ai` 一样在 DSH 登录闸门后面：
-  未登录 401，公网拿不到；数据只写本机文件，不上传、不经过第三方。
-- 好处是**换浏览器/换设备/清缓存都能恢复**；代价是这属于本机的敏感数据，
-  文件 0600、只有当前用户能读。
-- 「忘记这个生辰」（表单页）或盘面页的「忘记」→ `DELETE`，只清 `current`（下次打开不再自动恢复），
-  `history` 保留；要连历史一起清空，用「清空全部记录…」（`?scope=all`）。
-- 「生辰管理」：表单页「管理全部生辰（N）…」或盘面工具条「生辰 N ▾」菜单里的「管理全部生辰…」打开，列出全部记录；
-  可以对任意一条重新起盘、编辑（表单回填后保存，原地替换）或删除（二次确认）。
-  旧版没有表单快照的记录会提示「时间按该时辰中点预填」，保存后补上快照、时辰不变。
-- 早期版本写过浏览器 `localStorage`（键 `ziwei-birth-v1`）；页面加载时会顺手把那条旧记录删掉。
-- 恢复盘面时**不会**自动调用模型（省一次调用）：面板显示「已恢复上次生辰的命盘，
-  点上面的标签即可解读」；只有手动起盘那一轮才会自动生成「命格总览」。
-- 回归测试：`node test-persistence.mjs --url http://127.0.0.1:3099/ziwei/chart --token <token>`
-  （清空 → 预置历史 → 起盘写配置 → 重载恢复 → 换浏览器上下文仍能恢复 → 生辰管理：
-  列出全部 / 编辑单条 / 删除单条 → 重新起盘回填 → 忘记后历史保留；
-  会先快照并在结束时还原生产上已有的记录，不会冲掉用户数据）。
-
-### 版面：撑满可用高度
-
-内嵌在 DSH 面板里时，排盘页按 iframe 的高度铺满（`main { height: 100vh }`，
-盘面 4×4 网格行高 `1fr` 拉伸），不再在下面留一大片空白：
-
-- 左列命盘吃掉除标题栏外的全部高度；右列「命理解读」也是整列满高。
-- 右下角是 dsh-pet 的固定浮层，会盖在 iframe 之上。插件每 2s 量一次宠物在 iframe
-  里的遮挡矩形，`postMessage({type:'dsh-ziwei:insets', bottom, right})` 给排盘页，
-  输入区据此让开（页面 `<main data-pet-insets="bottom,right">` 便于验收断言），
-  否则「追问」按钮的真实点击会被宠物吞掉。
-
-**手机端 / 窄面板（`max-width: 900px`）**：两栏改成上下堆叠（`.zw-workspace`），
-盘面按宽度撑开、解读面板单独一块（60vh 可滚动），排盘页与表单页都不产生横向滚动；
-插件工具条在窄屏隐藏状态文案与「新窗口打开」、问句输入框独占一行，
-并在触摸设备上给左上角系统菜单按钮留出 60px 安全区，避免「紫微斗数」标题被挡住。
-
-### 解读面板：由 DSH 的模型生成
-
-排盘页右侧的「命理解读」是插件提供的，不用应用自己的 API Key：
-
-- 合盘页（`app/heming/page.tsx`）也走同一个接口：`topic: "heming"` + `digest`（甲方）+
-  `digestB`（乙方），host 半把两段摘要分别标成【甲方命盘】【乙方命盘】再拼进 prompt。
-- 应用侧 `components/InsightPanel.tsx` 直接 `fetch("/ziwei/ai")`（同源同 basePath），
-  六个 tab（命格/感情/事业/财运/健康/性格）+ 底部追问框；盘面摘要由
-  `lib/ziwei/digest.ts` 压成文本随请求一起发过去。
-- 插件 host 半 `lib/ai.js` 用 `ctx.llm.stream()` 走**宿主当前默认模型**
-  （`agentDefaultModel.currentSelection()`，目前 opencode-go / deepseek-v4.1-flash），
-  SSE 流式回吐 `{type:'delta'|'reasoning'|'error'|'done'}`，所以解读质量和你在
-  DSH 里聊天的模型完全一致，也不需要第二份凭据。
-- 请求头 `x-ziwei-thread`（页面会话级 uuid）会作为 `sessionId` 传下去：
-  opencode 路由要求 `x-opencode-session`，缺失会 400 `MissingSessionID`。
-- `reasoningEffort` 显式压到 `low`，否则 deepseek-v4.1 会先思考很久，
-  面板 90 秒内一个字都出不来；思考期间面板显示「模型正在思考这张盘…（已思考 N 字）」。
-- 思考也吃输出预算：预算给小了会出现「只想不说」（finish 可能是 `stop` 也可能
-  `max-tokens`，正文一个字没有）。所以首轮 2600 tokens，若仍无正文就放大到
-  6000 并要求「直接输出正文」重试一次。
-- 历史里的 assistant 消息必须带 `source: { kind: 'model', provider, model }`，
-  否则 pi-ai 适配器在 `toPiAssistant()` 里读 `message.source.replayState` 直接抛 TypeError。
-
-### 配色：跟随 DSH 外壳
-
-排盘应用本身支持浅/深两套 token（`app/globals.css` 的 `:root` 与 `[data-theme="dark"]`）。
-插件做了两件事让两边一致：
-
-- iframe 地址带 `?theme=light|dark`，取自外壳的 `color-scheme`（外壳是白色就是 light）；
-- 外壳切主题时（`MutationObserver` 监听 `<html>` 的 style/class）用
-  `postMessage({type:'dsh-ziwei:theme', theme})` 推给内嵌页，只换主题、不重载，盘面不丢。
-
-应用侧 `app/layout.tsx` 的首屏脚本优先级：URL `?theme=` → localStorage → **默认 light**。
-所以即使没有插件参数，独立打开也是浅色。
-
-### 安全模型
-
-`lib/index.js` 在每个请求上调用宿主注入的 `ctx.connection.requestRejection(req)`：
-
-- 不是受信 Host/Origin → 403
-- 没有 DSH 登录态 → 401
-
-所以 `/ziwei` 跟着 DSH 走，公网既没有匿名入口，也不需要额外维护一套鉴权。
-`/ziwei/*` 之外的其他路径仍然 404，不会借道转发到别的服务。
-
-### 「让 DSH 解读」怎么工作
-
-1. 内嵌页（Next.js，`basePath=/ziwei`）起盘后把盘面摘要 `postMessage` 给宿主页面
-   （`app/chart/page.tsx` + `lib/ziwei/digest.ts` 生成人类可读的十二宫/四化文本）。
-2. 点「让 DSH 解读」→ `uiWorkspace.startSession(workspaceId, {prompt})` 新开一个会话，
-   然后插件把 prompt 插进宿主的 Lexical 草稿（宿主没暴露写草稿的 API，用
-   `document.execCommand('insertText')` 走浏览器原生插入，等价于粘贴、可撤销），
-   同时复制一份到剪贴板兜底。
-3. 会话里就是完整的命盘 + 你补充的问题，按回车即开始解读。
-
-### 面板里的四个视图
-
-工具条右侧是分段控件，`排盘 / 合盘 / 古籍 / 百科` 分别对应应用里的
-`/ziwei/chart`、`/ziwei/heming`、`/ziwei/library`、`/ziwei/knowledge`：
-
-- 切换时重建 iframe（`switchView`），并清掉上一张盘摘要，避免「让 DSH 解读」拿到错盘的文本；
-- 每个视图的 URL 都带上 `?theme=<宿主题>`，配色继续跟随 DSH 外壳；
-- iframe 上有 `data-dsh-ziwei-frame="<view>"`、按钮上有 `data-dsh-ziwei-tab="<view>"`，
-  验收脚本靠它们断言「确实切过去了」。
-
-### 工具条上的两个小功能
-
-- **最近生辰**：宿主把用过的生辰存在 `$DSH_HOME/ziwei/birth.json`（最多 20 条去重），
-  工具条「生辰 N ▾」直接列出最近 5 条，点一条即换成那张盘；表单页顶部也有「最近用过」
-  的胶囊按钮。不写浏览器存储，换浏览器也在。
-- **生辰管理**：工具条「生辰 N ▾」菜单里的「管理全部生辰…」或表单页「管理全部生辰（N）…」打开弹层，
-  列出全部记录（当前那条有标记），可以起盘、编辑（表单回填）或单条删除；
-  弹层里仍保留「清空全部记录…」。
-- **复制盘面摘要**：收在工具条右侧「⋯」菜单里，把 `digestChart()` 生成的命盘文本复制到剪贴板，可以直接贴进任意会话，
-  不必经过「让 DSH 解读」开新会话。
-
-### 命盘页上的三处零件
-
-应用里原本有、但插件版早期接丢了三块，现在都接回排盘页（都在 iframe 内，不走宿主）：
-
-- **命盘概览抽屉**：工具条上一行常驻摘要（`命宫 · 主星 | 五行局 | 格局 N 个`），
-  点「展开命盘概览」在盘面上方展开 `ChartSummary`（命格总览 + 本命四化 + 格局识别），
-  再点收起，不占常驻高度。
-- **点星看解释**：点盘面上任何一颗星，右上弹出 `StarDetailPanel`（古籍原文、倪师解读、
-  最佳宫位、职业/感情/财运倾向）。挂点在 `PalaceCell` 的 `data-ziwei-star`。
-- **分享命盘**：弹层里是 `ShareCardCanvas` 渲染的分享卡（html2canvas 现场生成 PNG 下载），
-  以及一个**带生辰参数的链接** `?b=1990-6-15-5&g=m`——对方点开直接看到同一张盘，
-  不用重填；分享链接优先级高于服务端记住的生辰，且不会被写回生辰配置。
-
-顺带清理：`PatternsCard`（与概览里的「格局识别」重复）和 `FamousPersonCard`
-（依赖 server-only 的名人数据、没有任何入口）已删除；`lib/ziwei/patterns.ts` 去掉了
-`import 'server-only'`（纯计算，客户端要用），`famous.ts` 仍保留 server-only。
-
-## 怎么验证
-
-```bash
-cd /root/workspace/plugins/dsh-ziwei
-npm run check     # node --check lib/index.js && node --check client.js
-```
-
-测试实例跑法（端到端，不碰生产）：
-
-```bash
-# 1) 起实例（profile 目录 /root/.dsh-ztest 是生产 web profile 的只读链接副本）
-DSH_HOME=/root/.dsh-ztest DSH_PASSWORDS_ENV_FILE=/root/.dsh/dsh-passwords/.env \
-  setsid nohup /root/.nvm/versions/node/v24.21.0/bin/dsh \
-  --profile ztest --no-open --host 127.0.0.1 --port 3099 > /tmp/ztest.log 2>&1 &
-
-# 2) 取带 token 的地址（每次 boot 都变）
-grep -o 'http://127.0.0.1:3099/?token=[A-Za-z0-9_-]*' /tmp/ztest.log | head -1
-
-# 3) 跑验收（--ask 会真的点一次「让 DSH 解读」，断言草稿被填入）
-node verify.mjs --url "<上面那行地址>" --out /tmp/ziwei-verify --ask
-```
-
-生产验收：
-
-```bash
-TOKEN=$(journalctl -u deepseek-harness.service | grep -o 'http://127.0.0.1:3080/?token=[A-Za-z0-9_-]*' | tail -1)
-node verify.mjs --url "$TOKEN" --out /root/workspace/plugins/dsh-ziwei/verification/prod --ask
-```
-
-验收覆盖：未登录 401、侧栏入口及其顺序、点击开主面板、iframe 渲染、登录态 200、
-iframe 内起盘、盘面桥接生效、点「让 DSH 解读」开新会话、草稿被填入、剪贴板兜底、
-无控制台报错。
-
-## 改完代码怎么生效
-
-`client.js` 由宿主按请求从磁盘拼进 `/plugins/??…` 束（`link:` 本地插件，
-实测改完只要**刷新页面**就生效，不需要重启 DSH；早前"必须重启"的判断是浏览器缓存导致的误判）。
-`lib/index.js`（host 半）改完才需要重启 DSH——那会杀掉当前会话这一轮，用脱离会话的方式：
-
-```bash
-# 用法：restart-and-verify.sh [延迟秒数]
-sudo systemd-run --on-active=10s --unit=dsh-ziwei-verify \
-  /root/workspace/plugins/dsh-ziwei/restart-and-verify.sh
-```
-
-脚本会：等一会儿 → `systemctl restart deepseek-harness` → 等 3080 起来 →
-从 journal 取 token → 跑 `verify.mjs --ask` → 报告写到 `verification/prod/`。
-
-## 主题验收
-
-`verify.mjs` 里有一条「内嵌页配色跟随 DSH 外壳」：读外壳的 `color-scheme`，再读 iframe 里的
-`<html data-theme>`，两者必须一致。最近的图标见 `verification/light/`。
-
-## 验收项（38）
-
-侧栏入口与顺序、面板打开、iframe 渲染、配色跟随外壳、登录/未登录鉴权、起盘、
-**版面纵向撑满**、**宠物遮挡区域同步给内嵌页**、
-**生辰写进服务端配置（含表单快照与稳定 id、不再写 localStorage）**、
-**生辰管理能列出全部记录 / 编辑单条 / 删除单条**、
-**解读面板存在（由 DSH 模型生成）**、**应用旧 `/api/interpret` 已 404**、
-**自动生成命格解读**、**切 tab 重新解读**、**追问按钮不被宠物浮层遮挡**、
-**追问带上下文继续解读**、**命盘概览抽屉展开/收起**、**点星弹出星曜详情**、
-**分享弹层渲染分享卡**、**分享链接带生辰参数**、**能生成并下载分享图**、
-**分享链接能还原同一张盘**、**面板四个视图切换**、盘面桥接、新会话、
-草稿预填、剪贴板兜底、无控制台报错。
-截图在 `verification/`（`03-chart-bridged.png`、`05-panel-reading.png`、
-`06-brief.png`、`07-star-detail.png`、`08-share.png`、`09-panel-knowledge.png`）。
-
-## 依赖
-
-- 排盘应用本身：**本仓库 `app/`**（原 `workspace/ziwei-doushu`，已整体搬入并删除旧目录），
-  `dsh-ziwei-app.service`，监听 `127.0.0.1:8815`，
-  `NEXT_PUBLIC_BASE_PATH=/ziwei`、`next.config.js` 里 `basePath: '/ziwei'`。
-- `app/` 的依赖用 npm 装（`next ^16.3.8`、`react ^19.2.5`、`iztro`、`lunar-javascript`、
-  `framer-motion`、`html2canvas` 等），`node_modules` 不入库。
-- playwright（只验收用）：复用 `/root/workspace/hermes-site/tools/node_modules`，
-  浏览器在 `/root/.cache/ms-playwright`。
-
-## 已知限制
-
-- 解读只有一条路：插件 host 半的 `/ziwei/ai` → 宿主模型（用你自己的模型与额度）；
-  应用自带的 `/api/interpret` 已删除，不存在第二套配置。
-- 「让 DSH 解读」要求至少有一个 Workspace；全新 DSH_HOME 会先由
-  `workspaces.initializeDefault()` 建默认工作区再开会话。
-- 草稿插入依赖浏览器 `execCommand`，失败时退化为「剪贴板 + 用户手动粘贴」。
-
-## 提交约定
-
-沿用 [Conventional Commits](https://www.conventionalcommits.org/)：`<type>(<scope>): <中文摘要>`。
-
-- `type`：`feat`（新功能）/ `fix`（修 bug）/ `docs` / `test` / `build` / `chore` / `refactor`
-- `scope`：受影响的部分，如 `host`、`client`、`panel`、`ai`、`layout`、`verify`
-- 摘要用祈使句、不加句号，控制在 50 字内；正文说明「为什么」和影响面
-- 一次提交只做一件事；改完必须跑过 `npm run check`（或等价）与对应的验收脚本
+MIT — see [LICENSE](LICENSE). The embedded app under `app/` keeps its own MIT license (© 2026 紫微研究), covering the chart engine and classical texts inherited from the open-source `ziwei-doushu` project.
