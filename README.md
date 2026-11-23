@@ -1,4 +1,53 @@
-# dsh-ziwei · 紫微斗数（DSH 插件）
+<div align="center">
+
+# dsh-ziwei 「紫微斗数」
+
+**DSH 里的紫微斗数排盘面板：本地起盘，盘面直接交给 DSH Agent 解读。**
+
+A Zi Wei Dou Shu chart panel inside DSH — cast the chart locally, then hand it to the DSH agent to read.
+
+[![Version](https://img.shields.io/badge/version-0.1.0-blue)](package.json)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Platform](https://img.shields.io/badge/DSH-DeepSeek%20Harness-5b5ef7)](https://github.com/frankfurtlin/dsh-pocket)
+
+[中文](README.md) · [English](README.en.md)
+
+</div>
+
+![排盘面板](verification/prod/02-panel.png)
+
+## 这是什么
+
+紫微斗数插件把原来独立的排盘站点收进 DSH：侧栏「插件」组里多一行入口，点开是内嵌的同源 iframe，跑本机 `127.0.0.1:8815` 上的 Next.js 排盘应用，只有 DSH 登录用户能访问。起盘、生辰记忆、合盘、古籍、百科都在这一页里；右侧「命理解读」由宿主当前默认模型生成，不需要再配第二份 API Key。
+
+它解决的问题是盘面和对话原本割裂：排盘在一个站点，解读在另一个对话窗口，中间靠复制粘贴。现在盘面摘要通过 `postMessage` 交给插件工具条，点「让 DSH 解读」就把完整命盘写进新会话的输入框，可以接着追问。
+
+## 功能
+
+- **排盘**：公历 / 农历、时辰、性别、真太阳时，4×4 宫位命盘，纵向撑满面板高度。
+- **命理解读**：`/ziwei/ai` 走宿主模型的 SSE 流式接口，六个 tab（命格 / 感情 / 事业 / 财运 / 健康 / 性格）+ 底部追问。
+- **交给 Agent**：「让 DSH 解读」把盘面摘要插入宿主草稿并新开会话，失败时退到剪贴板兜底。
+- **生辰记忆**：生辰存在服务端 `$DSH_HOME/ziwei/birth.json`（0600），换浏览器 / 换设备都能恢复，最多保留 20 条。
+- **生辰管理**：列出全部记录、编辑单条、删除单条、清空；「忘记」只清当前盘。
+- **四个视图**：排盘 / 合盘 / 古籍 / 百科，切换时重建 iframe 并同步主题。
+- **盘面零件**：命盘概览抽屉、点星看解释（古籍原文 + 现代解读）、分享卡与带生辰参数的链接。
+- **可验收**：`verify.mjs` 47 项 + `app/test-persistence.mjs` 32 项真实浏览器验收（含手机端 390×844）。
+
+## 安装
+
+```bash
+# 1) 排盘应用：装依赖、构建，由 systemd 单元跑在 127.0.0.1:8815
+cd app && npm install && npm run build
+systemctl restart dsh-ziwei-app.service
+
+# 2) 插件：插件页 → 添加插件 → 填本仓库绝对路径 → 安装 → 打开开关 → 刷新页面
+#    等价手工：profile package.json 加 "dsh-ziwei": "link:/root/workspace/plugins/dsh-ziwei"，
+#    dsh.profile.bundles 末尾加 "dsh-ziwei"，再把 node_modules/dsh-ziwei 链到本目录
+```
+
+## 详细文档
+
+下面几节是完整说明。
 
 把一个紫微斗数排盘应用装进 DSH：侧栏「插件」组里，**Automation tasks** 下面多一行
 **紫微斗数**，点开就是排盘主页面，不用再走公网域名；盘面可以直接交给 DSH 的 Agent 解读。
