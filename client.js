@@ -3,8 +3,8 @@
  *
  * 手写 ModuleLoader 工厂，不经打包：只依赖宿主已提供的 react / react/jsx-runtime，
  * 用 h() 直接构造元素。做两件事：
- *   1. 在侧栏「插件」组的 panellist 座位注册一行「紫微斗数」（order 16，落在
- *      知识库(14) 与华尔街之狼(18) 之间）。
+ *   1. 在侧栏「插件」组的 panellist 座位注册一行「紫微斗数」（order 14，排在
+ *      酒馆(12) 之后，是常驻行里最后一条兴趣入口）。
  *   2. 在 main 座位注册 keyed 面板页：同源 iframe 指向宿主反代的 /ziwei/，
  *      并把 iframe 上报的盘面摘要组装成 prompt，一键开新会话交给 DSH Agent。
  */
@@ -20,8 +20,8 @@ window.__ModuleLoader__.load({
 
     /** 侧栏行 id —— 同时是 main 座位的 key 与图标上的 data 锚点。 */
     var PANEL_ID = "ziwei";
-    /** 侧栏顺序：Automation tasks = 10，酒馆 = 12，知识库 = 14，紫微斗数 = 16，华尔街之狼 = 18。 */
-    var PANEL_ORDER = 16;
+    /** 侧栏顺序：插件 = 0，知识库 = 3，华尔街之狼 = 5，创作台 = 6，Automation tasks = 10，酒馆 = 12，紫微斗数 = 14。 */
+    var PANEL_ORDER = 14;
 
     var COLORS = {
       border: "color-mix(in srgb, currentColor 18%, transparent)",
