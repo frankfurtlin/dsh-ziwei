@@ -1,15 +1,24 @@
 #!/bin/bash
 # 生产重启 + 自动验收（脱离 DSH 会话执行，避免 systemctl restart 自杀）。
-# 用法：systemd-run --on-active=10s --unit=dsh-ziwei-verify /root/workspace/plugins/dsh-ziwei/restart-and-verify.sh
+# 用法：systemd-run --on-active=10s --unit=dsh-ziwei-verify /opt/dsh/dsh-ziwei/restart-and-verify.sh
 set -u
-# systemd 单元里 HOME 是空的，fontconfig 会跳过 /root/.fonts → 截图里中文成豆腐块
-export HOME=/root
-export XDG_CACHE_HOME=/root/.cache
+# systemd 单元里 HOME 是空的，fontconfig 会跳过 ~/.fonts → 截图里中文成豆腐块：
+# 取当前用户在 passwd 里的家目录，不写死绝对路径。
+HOME=$(getent passwd "$(id -u)" | cut -d: -f6)
+if [ -z "$HOME" ]; then HOME=$(cd ~ 2>/dev/null && pwd); fi
+export HOME
+export XDG_CACHE_HOME="$HOME/.cache"
 
-PLUGIN_DIR=/root/workspace/plugins/dsh-ziwei
+# 仓库根目录 = 本脚本所在目录（脚本放在仓库根上），换部署路径不用改。
+PLUGIN_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 OUT_DIR="$PLUGIN_DIR/verification/prod"
 LOG="$OUT_DIR/restart-$(date +%Y%m%d-%H%M%S).log"
-NODE=/root/.nvm/versions/node/v24.21.0/bin/node
+# node 解释器：优先 NODE 环境变量，其次 nvm 下的当前版本（生产宿主就用它），最后才退到 PATH。
+if [ -z "${NODE:-}" ]; then
+  NODE=$(ls -d "$HOME"/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1 || true)
+fi
+if [ -z "${NODE:-}" ]; then NODE=$(command -v node || true); fi
+if [ -z "${NODE:-}" ]; then echo "找不到 node（用 NODE=/path/to/node 指定）"; exit 1; fi
 
 mkdir -p "$OUT_DIR"
 exec > >(tee -a "$LOG") 2>&1

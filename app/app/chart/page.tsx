@@ -32,7 +32,7 @@ import type { BirthInfo, ZiweiChart, Palace, Star } from '@/lib/ziwei/types';
  * 用本仓库的排盘引擎 generateChart() 渲染一张完整紫微命盘，并支持本命 / 大限 /
  * 流年切换、命盘总览（命格 · 四化 · 格局）、点星看解释、分享图。
  * 解读不在这里做：作为 DSH 插件嵌入时，盘面摘要会 postMessage 给宿主，
- * 由 DSH Agent 负责解读与追问（见 /root/workspace/plugins/dsh-ziwei）。
+ * 由 DSH Agent 负责解读与追问（见 /opt/dsh/dsh-ziwei）。
  *
  * 生辰记忆：写到宿主侧配置文件（插件 host 半的 /ziwei/birth 接口），换浏览器
  * 也能恢复；分享链接里的 `?b=YYYY-MM-DD-H&g=m` 优先于已存记录，打开分享链接

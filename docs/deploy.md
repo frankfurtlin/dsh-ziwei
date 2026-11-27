@@ -5,7 +5,7 @@
 | 东西 | 位置 | 端口 | 服务 |
 | --- | --- | --- | --- |
 | DSH 宿主 | `~/.nvm/.../bin/dsh --profile web` | `127.0.0.1:3080` | `deepseek-harness.service` |
-| 插件 | `/root/workspace/plugins/dsh-ziwei`（本仓库） | 借 3080 | 跟着宿主 |
+| 插件 | `/opt/dsh/dsh-ziwei`（本仓库） | 借 3080 | 跟着宿主 |
 | 排盘应用 | 本仓库 `app/` | `127.0.0.1:8815` | `dsh-ziwei-app.service` |
 | 登录网关 | dsh-passwords | `3081` | 转给 3080 |
 | Caddy | `/etc/caddy/Caddyfile` | `*:80/*:443` | `caddy.service` |
@@ -17,18 +17,20 @@
 ```ini
 [Service]
 User=root
-WorkingDirectory=/root/workspace/plugins/dsh-ziwei/app
-EnvironmentFile=/root/workspace/plugins/dsh-ziwei/app/.env.local
-Environment=PATH=/root/.nvm/versions/node/v24.21.0/bin:/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=/opt/dsh/dsh-ziwei/app
+EnvironmentFile=/opt/dsh/dsh-ziwei/app/.env.local
+Environment=PATH=~/.nvm/versions/node/v24.21.0/bin:/usr/local/bin:/usr/bin:/bin
 Environment=NODE_ENV=production
 Environment=NEXT_TELEMETRY_DISABLED=1
 Environment=NEXT_PUBLIC_SITE_URL=https://dsh.frankfurtlin.top/ziwei
 Environment=NEXT_PUBLIC_BASE_PATH=/ziwei
-ExecStart=/root/.nvm/versions/node/v24.21.0/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 8815
+ExecStart=~/.nvm/versions/node/v24.21.0/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 8815
 Restart=on-failure
 RestartSec=4
 ```
 
+> 单元里的 `~` 只是「运行用户的家目录」简写（systemd 不展开 `~`）：真机上先
+> `echo $HOME` 展开成绝对路径，再写进单元。
 > 应用从 `workspace/ziwei-doushu` 搬到 `plugins/dsh-ziwei/app` 后，老单元
 > `ziwei-doushu.service` 已经 disable + 删除，只有这一个单元。
 
@@ -42,11 +44,11 @@ journalctl -u dsh-ziwei-app.service -n 50 --no-pager
 
 ## 插件怎么注册进 DSH
 
-`/root/.dsh/profiles/web/package.json`：
+`~/.dsh/profiles/web/package.json`：
 
 ```json
 {
-  "dependencies": { "dsh-ziwei": "link:/root/workspace/plugins/dsh-ziwei" },
+  "dependencies": { "dsh-ziwei": "link:/opt/dsh/dsh-ziwei" },
   "dsh": { "profile": { "bundles": ["…", "dsh-skin", "dsh-pet", "dsh-ziwei"] } }
 }
 ```
@@ -69,7 +71,7 @@ journalctl -u dsh-ziwei-app.service -n 50 --no-pager
 
 ```bash
 systemd-run --on-active=120s --unit=dsh-ziwei-deploy \
-  /root/workspace/plugins/dsh-ziwei/restart-and-verify.sh
+  /opt/dsh/dsh-ziwei/restart-and-verify.sh
 ```
 
 然后用 `schedule_create` 或等它自己把报告写进 `verification/prod/`。
@@ -77,7 +79,7 @@ systemd-run --on-active=120s --unit=dsh-ziwei-deploy \
 ## 构建
 
 ```bash
-cd /root/workspace/plugins/dsh-ziwei/app
+cd /opt/dsh/dsh-ziwei/app
 npx tsc --noEmit          # 类型闸门
 npm test                  # 10 个排盘回归脚本
 npm run build             # 生成 .next
@@ -92,7 +94,7 @@ systemctl restart dsh-ziwei-app.service
 ## 插件静态检查
 
 ```bash
-cd /root/workspace/plugins/dsh-ziwei
+cd /opt/dsh/dsh-ziwei
 node --check client.js
 node --check lib/index.js && node --check lib/ai.js && node --check lib/birth-store.js
 node --check verify.mjs
@@ -103,7 +105,7 @@ node --check verify.mjs
 ### 1) 插件端到端（38 项）
 
 ```bash
-cd /root/workspace/plugins/dsh-ziwei
+cd /opt/dsh/dsh-ziwei
 node verify.mjs --url "http://127.0.0.1:3080/?token=<token>" --out verification/prod --ask
 ```
 
@@ -115,7 +117,7 @@ node verify.mjs --url "http://127.0.0.1:3080/?token=<token>" --out verification/
 ### 2) 生辰持久化（16 项）
 
 ```bash
-cd /root/workspace/plugins/dsh-ziwei/app
+cd /opt/dsh/dsh-ziwei/app
 node test-persistence.mjs --url http://127.0.0.1:8815/ziwei/chart --shots /tmp/birth
 ```
 
@@ -125,10 +127,10 @@ node test-persistence.mjs --url http://127.0.0.1:8815/ziwei/chart --shots /tmp/b
 ### 3) 一条命令跑完（重启 + 两项验收）
 
 ```bash
-/root/workspace/plugins/dsh-ziwei/restart-and-verify.sh
+/opt/dsh/dsh-ziwei/restart-and-verify.sh
 ```
 
-脚本内部：`export HOME=/root`（否则 systemd 单元里 fontconfig 跳过 `/root/.fonts`，
+脚本内部：从 passwd 取家目录补 `HOME`（否则 systemd 单元里 fontconfig 跳过 `~/.fonts`，
 截图中文变豆腐块）→ 重启 DSH → 等 3080 → 从 journal 取 token → 检查公网
 `dsh.frankfurtlin.top/ziwei/` 未登录状态码（期望 302/401，404 = 未接通）→
 跑 `verify.mjs`（38 项）→ 跑 `app/test-persistence.mjs`（16 项）。
@@ -146,17 +148,17 @@ grep -o 'http://127.0.0.1:3099/?token=[A-Za-z0-9_-]*' /tmp/ztest.log | head -1
 
 ```bash
 # 一次性准备（复用生产的 node_modules 与凭据，sessions 独立）
-mkdir -p /root/.dsh-ztest/profiles/ztest
-ln -sf /root/.dsh/profiles/web/package.json      /root/.dsh-ztest/profiles/ztest/package.json
-ln -sf /root/.dsh/profiles/web/node_modules      /root/.dsh-ztest/profiles/ztest/node_modules
-ln -sf /root/.dsh/profiles/web/cordis.yml        /root/.dsh-ztest/profiles/ztest/cordis.yml
-ln -sf /root/.dsh/profiles/web/cordis.patch.yml  /root/.dsh-ztest/profiles/ztest/cordis.patch.yml
-cp /root/.dsh/.credentials.yaml /root/.dsh-ztest/.credentials.yaml   # 否则模型报 no credential
-cp /root/.dsh/storages/workspace.json /root/.dsh-ztest/storages/workspace.json  # 否则没 Workspace
+mkdir -p ~/.dsh-ztest/profiles/ztest
+ln -sf ~/.dsh/profiles/web/package.json      ~/.dsh-ztest/profiles/ztest/package.json
+ln -sf ~/.dsh/profiles/web/node_modules      ~/.dsh-ztest/profiles/ztest/node_modules
+ln -sf ~/.dsh/profiles/web/cordis.yml        ~/.dsh-ztest/profiles/ztest/cordis.yml
+ln -sf ~/.dsh/profiles/web/cordis.patch.yml  ~/.dsh-ztest/profiles/ztest/cordis.patch.yml
+cp ~/.dsh/.credentials.yaml ~/.dsh-ztest/.credentials.yaml   # 否则模型报 no credential
+cp ~/.dsh/storages/workspace.json ~/.dsh-ztest/storages/workspace.json  # 否则没 Workspace
 
-cd /root/.dsh-ztest && DSH_HOME=/root/.dsh-ztest \
-  DSH_PASSWORDS_ENV_FILE=/root/.dsh/dsh-passwords/.env \
-  setsid nohup /root/.nvm/versions/node/v24.21.0/bin/dsh \
+cd ~/.dsh-ztest && DSH_HOME=~/.dsh-ztest \
+  DSH_PASSWORDS_ENV_FILE=~/.dsh/dsh-passwords/.env \
+  setsid nohup ~/.nvm/versions/node/v24.21.0/bin/dsh \
   --profile ztest --no-open --host 127.0.0.1 --port 3099 > /tmp/ztest.log 2>&1 &
 
 # 停：只杀真正的 node 进程，别用 pkill -f "profile ztest"（会把自己的 shell 也 SIGTERM）
@@ -185,7 +187,7 @@ pkill -f '[n]ode .*dsh --profile ztest'
 | `/ziwei/` 返回 401 | 正常（未登录）；用带 token 的地址打开 |
 | 公网 `/ziwei/` 404 | 正常（已摘除公网路由）；只能在 DSH 登录后访问 |
 | 解读一直空 / 「模型没有返回内容」 | 是否选了默认模型（设置 → 模型）；`DSH_ZIWEI_AI_DEBUG=1` 重启宿主看 chunk 日志 |
-| 截图中文是豆腐块 | 脚本里 `export HOME=/root`；`fc-list \| grep -i "Noto Sans SC"`（字体在 `/root/.fonts`） |
+| 截图中文是豆腐块 | 脚本里 `HOME` 为空；`fc-list \| grep -i "Noto Sans SC"`（字体在 `~/.fonts`） |
 | 点「追问」没反应 | 是否被 dsh-pet 浮层挡住：`data-pet-insets` 是否是 `0,0`（宿主没推过来） |
 
 ## 与 Caddy 的关系

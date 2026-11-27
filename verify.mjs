@@ -13,9 +13,17 @@
  */
 import { createRequire } from 'node:module'
 import { mkdir, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const require = createRequire('/root/workspace/hermes-site/tools/node_modules/')
+const HERE = path.dirname(fileURLToPath(import.meta.url))
+// playwright 装在兄弟仓库 hermes-site/tools 下（本仓库不带 node_modules）：
+// 路径运行时推导，可用 DSH_ZIWEI_PLAYWRIGHT_MODULES 覆盖。
+const HERMES_TOOLS =
+  process.env.DSH_ZIWEI_PLAYWRIGHT_MODULES ||
+  path.join(homedir(), 'workspace', 'hermes-site', 'tools', 'node_modules')
+const require = createRequire(HERMES_TOOLS + '/')
 const { chromium } = require('playwright')
 
 const args = process.argv.slice(2)
@@ -25,7 +33,7 @@ function arg(name, fallback) {
   return args[index + 1] ?? fallback
 }
 const url = arg('url', process.env.DSH_WEB_URL || '')
-const outDir = arg('out', '/root/workspace/plugins/dsh-ziwei/verification')
+const outDir = arg('out', path.join(HERE, 'verification'))
 const skipChart = args.includes('--no-chart')
 if (!url) {
   console.error('缺少 --url（带 token 的 DSH Web 地址）')

@@ -148,7 +148,7 @@
 
 新增 `docs/`：`README`（索引 + 速览 + 改代码前必看）、`architecture`（两层结构与鉴权）、
 `api`（三个入口协议与错误码）、`app-map`（应用能力地图）、`deploy`（单元/构建/验收/回滚/排障）、
-本文件（演进与踩坑）。同时把 README 里指向旧路径 `/root/workspace/ziwei-doushu` 的说法、
+本文件（演进与踩坑）。同时把 README 里指向旧路径 `~/workspace/ziwei-doushu` 的说法、
 `restart-and-verify.sh` 里的 test-persistence 路径、502 文案里的 systemd 单元名一并修正。
 
 ## 11. 修「百科点进去 404」
@@ -279,7 +279,7 @@
 用户看了上一轮的「已知但未动」后说「收紧一下」。这一轮不新增功能，只把回给浏览器的文案与
 路径里多余的内部信息拿掉；诊断信息全部改走宿主日志。
 
-- **不再回本机绝对路径**：`GET/POST /ziwei/birth` 的 `file` 从 `/root/.dsh/ziwei/birth.json`
+- **不再回本机绝对路径**：`GET/POST /ziwei/birth` 的 `file` 从 `~/.dsh/ziwei/birth.json`
   改成 `ziwei/birth.json`（相对 `$DSH_HOME`）。绝对路径会漏出用户名与目录结构。
 - **反代失败文案去内部细节**：502 从「紫微斗数应用暂时不可用（ECONNREFUSED）。请确认本地服务
   在跑：`systemctl status dsh-ziwei-app.service`」改成「紫微斗数应用暂时不可用，请稍后重试。」；

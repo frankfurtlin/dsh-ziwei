@@ -12,8 +12,15 @@
 // 不带 --token 也可以直接测 Next 自己（此时没有 /ziwei/birth 接口，服务端断言会失败）。
 import { createRequire } from 'node:module';
 import { mkdir } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import path from 'node:path';
 
-const require = createRequire('/root/workspace/hermes-site/tools/node_modules/');
+// playwright 装在兄弟仓库 hermes-site/tools 下（本仓库不带 node_modules）：
+// 路径运行时推导，可用 DSH_ZIWEI_PLAYWRIGHT_MODULES 覆盖。
+const HERMES_TOOLS =
+  process.env.DSH_ZIWEI_PLAYWRIGHT_MODULES ||
+  path.join(homedir(), 'workspace', 'hermes-site', 'tools', 'node_modules');
+const require = createRequire(HERMES_TOOLS + '/');
 const { chromium } = require('playwright');
 
 const args = process.argv.slice(2);

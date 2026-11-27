@@ -84,7 +84,7 @@ scripts/install-hooks.sh    # 装 pre-commit：静态检查不过就提交不了
 ### 生辰与「最近生辰」（2、3、13–16、32–35、46）
 
 - 起盘后生辰写进服务端配置文件（不是 localStorage），且带表单快照（重新起盘能回填）；
-- `GET /ziwei/birth` 只回 `file: "ziwei/birth.json"` 相对路径，不泄漏 `/root/...` 绝对路径；
+- `GET /ziwei/birth` 只回 `file: "ziwei/birth.json"` 相对路径，不泄漏 `~/...` 绝对路径；
 - `DELETE` 默认只清 `current`、保留 `history`（`current=null history=N`），清空全部要 `?scope=all`；
 - 验收结束必须完整还原用户数据（清空 → 按旧→新回放 history → 写回 current），
   并断言恢复条数 ≥ 快照条数（否则说明脚本又把历史冲了）；
@@ -150,11 +150,11 @@ scripts/install-hooks.sh    # 装 pre-commit：静态检查不过就提交不了
 
 ```bash
 systemd-run --on-active=120s --unit=dsh-ziwei-deploy \
-  /root/workspace/plugins/dsh-ziwei/restart-and-verify.sh
+  /opt/dsh/dsh-ziwei/restart-and-verify.sh
 ```
 
-`restart-and-verify.sh` = `export HOME=/root`（否则 systemd 单元里 fontconfig 找不到
-`/root/.fonts`，截图中文变豆腐块）→ 重启 harness → 等 3080 → 从 journal 取最新 token →
+`restart-and-verify.sh` = 从 passwd 取家目录补 `HOME`（否则 systemd 单元里 fontconfig 找不到
+`~/.fonts`，截图中文变豆腐块）→ 重启 harness → 等 3080 → 从 journal 取最新 token →
 查公网 `https://dsh.frankfurtlin.top/ziwei/` 未登录状态码（302/401 正常，404 说明没接通）→
 跑 verify + persistence，结果写 `verification/prod/`。
 
@@ -171,7 +171,7 @@ systemd-run --on-active=120s --unit=dsh-ziwei-deploy \
 | 日志里没有 token | dsh 只在启动早期打印一次 `?token=`。取 `grep -o '...token=[A-Za-z0-9_-]*' log \| head -1`（`tail -1` 常取空） |
 | 「让 DSH 解读」卡在 Choose a workspace | 隔离 home 没有工作区，检查有没有复制 `storages/workspace.json` |
 | 解读断言全挂、日志有 `no credential` | 没复制 `.credentials.yaml` |
-| 截图里中文是豆腐块 | 缺 `/root/.fonts` 下的 Noto Sans SC，或没 `export HOME=/root` |
+| 截图里中文是豆腐块 | 缺 `~/.fonts` 下的 Noto Sans SC，或 `HOME` 为空 |
 | `page.goto` 30s 超时 | dsh web 永远不会 networkidle，必须 `domcontentloaded` + `waitForSelector` |
 | 验收把「最近生辰」清空了 | 检查脚本是否用 `?scope=all` 起跑并完整回放 history；`report.json` 里「完整恢复了原有的生辰记录」必须是 PASS |
 | `force: true` 掩盖点击失效 | 宠物浮层会拦截真实点击，能用真实点击就别 force |

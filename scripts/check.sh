@@ -14,8 +14,9 @@
 #      跑完把实例关掉。生产实例（3080）与你的真实生辰配置全程不被碰。
 #
 # 依赖（本机已有）：
-#   - playwright：/root/workspace/hermes-site/tools/node_modules（两个验收脚本里写死了这个路径）
-#   - 中文字体：/root/.fonts 下至少有 Noto Sans SC，否则截图里的中文是豆腐块
+#   - playwright：`~/workspace/hermes-site/tools/node_modules`（两个验收脚本按家目录推导，可用
+#     DSH_ZIWEI_PLAYWRIGHT_MODULES 覆盖）
+#   - 中文字体：`~/.fonts` 下至少有 Noto Sans SC，否则截图里的中文是豆腐块
 #   - 真实 DSH_HOME 里的 .credentials.yaml（模型调用）与 storages/workspace.json（新会话要选工作区）
 #
 set -uo pipefail
