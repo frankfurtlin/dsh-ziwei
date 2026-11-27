@@ -33,14 +33,25 @@
 ## 安装
 
 ```bash
-# 1) 排盘应用：装依赖、构建，由 systemd 单元跑在 127.0.0.1:8815
-cd app && npm install && npm run build
-systemctl restart dsh-ziwei-app.service
+# 1) 排盘应用：装依赖、构建，由随仓库分发的单元跑在 127.0.0.1:8815
+sudo git clone https://github.com/frankfurtlin/dsh-ziwei /opt/dsh/dsh-ziwei
+cd /opt/dsh/dsh-ziwei/app && npm ci && npm run build
 
-# 2) 插件：插件页 → 添加插件 → 填本仓库绝对路径 → 安装 → 打开开关 → 刷新页面
-#    等价手工：profile package.json 加 "dsh-ziwei": "link:/root/workspace/plugins/dsh-ziwei"，
+sudo cp deploy/systemd/dsh-ziwei-app.service.example /etc/systemd/system/dsh-ziwei-app.service
+#   改这份副本：checkout 路径、NEXT_PUBLIC_SITE_URL、nvm 装的 node 解释器路径
+sudo systemctl daemon-reload && sudo systemctl enable --now dsh-ziwei-app
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8815/ziwei/chart
+
+# 2) 插件：dsh plugin --profile web add <你的 checkout 路径>
+#    （等价：插件页 → 添加插件 → 填本仓库绝对路径 → 安装 → 打开开关 → 刷新页面）
+#    等价手工：profile package.json 加 "dsh-ziwei": "link:<你的 checkout 路径>"，
 #    dsh.profile.bundles 末尾加 "dsh-ziwei"，再把 node_modules/dsh-ziwei 链到本目录
 ```
+
+示例把 checkout 装在 `/opt/dsh/dsh-ziwei`；这只是示例路径，换成你自己的目录，命令与单元
+文件里的路径一起改。`next start` 在没有构建产物时会直接退出，所以先 `npm run build`，
+之后每次改应用都要「重新构建 + 重启单元」。字段与权限说明见
+[`deploy/systemd/README.md`](deploy/systemd/README.md)。
 
 ## 详细文档
 
@@ -54,7 +65,8 @@ systemctl restart dsh-ziwei-app.service
 
 - 侧栏顺序：Automation tasks(10) → **紫微斗数(16)** → Skill Center(30)
 - 公网入口（`hermes.frankfurtlin.top/ziwei/`）已于 2026-11-03 撤掉，现在只能通过 DSH 登录态访问
-- 插件目录：`/root/workspace/plugins/dsh-ziwei`，注册在 `/root/.dsh/profiles/web/package.json`
+- 插件目录：本仓库的 checkout（本文示例 `/opt/dsh/dsh-ziwei`），注册在
+  `~/.dsh/profiles/web/package.json`
 - 应用目录：本仓库 `app/`，由 `dsh-ziwei-app.service` 跑在 `127.0.0.1:8815`
 
 ## 改完代码先自检
@@ -251,16 +263,17 @@ scripts/install-hooks.sh    # 装 pre-commit，静态不过就提交不了
 ## 怎么验证
 
 ```bash
-cd /root/workspace/plugins/dsh-ziwei
+cd <你的 checkout 路径>
 npm run check     # node --check lib/index.js && node --check client.js
 ```
 
 测试实例跑法（端到端，不碰生产）：
 
 ```bash
-# 1) 起实例（profile 目录 /root/.dsh-ztest 是生产 web profile 的只读链接副本）
-DSH_HOME=/root/.dsh-ztest DSH_PASSWORDS_ENV_FILE=/root/.dsh/dsh-passwords/.env \
-  setsid nohup /root/.nvm/versions/node/v24.21.0/bin/dsh \
+# 1) 起实例（profile 目录 ~/.dsh-ztest 是生产 web profile 的只读链接副本；
+#    nvm 装的 dsh 不在 PATH 上时，把 `dsh` 换成它的绝对路径）
+DSH_HOME=~/.dsh-ztest DSH_PASSWORDS_ENV_FILE=~/.dsh/dsh-passwords/.env \
+  setsid nohup dsh \
   --profile ztest --no-open --host 127.0.0.1 --port 3099 > /tmp/ztest.log 2>&1 &
 
 # 2) 取带 token 的地址（每次 boot 都变）
@@ -274,7 +287,7 @@ node verify.mjs --url "<上面那行地址>" --out /tmp/ziwei-verify --ask
 
 ```bash
 TOKEN=$(journalctl -u deepseek-harness.service | grep -o 'http://127.0.0.1:3080/?token=[A-Za-z0-9_-]*' | tail -1)
-node verify.mjs --url "$TOKEN" --out /root/workspace/plugins/dsh-ziwei/verification/prod --ask
+node verify.mjs --url "$TOKEN" --out verification/prod --ask
 ```
 
 验收覆盖：未登录 401、侧栏入口及其顺序、点击开主面板、iframe 渲染、登录态 200、
@@ -290,7 +303,7 @@ iframe 内起盘、盘面桥接生效、点「让 DSH 解读」开新会话、�
 ```bash
 # 用法：restart-and-verify.sh [延迟秒数]
 sudo systemd-run --on-active=10s --unit=dsh-ziwei-verify \
-  /root/workspace/plugins/dsh-ziwei/restart-and-verify.sh
+  <你的 checkout 路径>/restart-and-verify.sh
 ```
 
 脚本会：等一会儿 → `systemctl restart deepseek-harness` → 等 3080 起来 →
@@ -323,8 +336,8 @@ sudo systemd-run --on-active=10s --unit=dsh-ziwei-verify \
   `NEXT_PUBLIC_BASE_PATH=/ziwei`、`next.config.js` 里 `basePath: '/ziwei'`。
 - `app/` 的依赖用 npm 装（`next ^16.3.8`、`react ^19.2.5`、`iztro`、`lunar-javascript`、
   `framer-motion`、`html2canvas` 等），`node_modules` 不入库。
-- playwright（只验收用）：复用 `/root/workspace/hermes-site/tools/node_modules`，
-  浏览器在 `/root/.cache/ms-playwright`。
+- playwright（只验收用）：复用机器上已装好的 Playwright（`node_modules` 可指向任意已有安装），
+  浏览器缓存默认在 `~/.cache/ms-playwright`。
 
 ## 已知限制
 

@@ -32,15 +32,25 @@ DSH sidebar → 插件 → 紫微斗数              one new row
 ## Install
 
 ```bash
-# 1) the chart app: build it, then run it under its unit on 127.0.0.1:8815
-cd app && npm install && npm run build
-systemctl restart dsh-ziwei-app.service
+# 1) the chart app: install, build, then run it under the unit that ships here
+sudo git clone https://github.com/frankfurtlin/dsh-ziwei /opt/dsh/dsh-ziwei
+cd /opt/dsh/dsh-ziwei/app && npm ci && npm run build
 
-# 2) the plugin: Plugins page → Add plugin → this repo's absolute path → Install →
-#    enable the switch → reload. The manual equivalent is adding
-#    "dsh-ziwei": "link:/root/workspace/plugins/dsh-ziwei" to the profile's dependencies,
-#    appending "dsh-ziwei" to dsh.profile.bundles, then linking it into node_modules.
+sudo cp deploy/systemd/dsh-ziwei-app.service.example /etc/systemd/system/dsh-ziwei-app.service
+#   edit the copy: checkout path, NEXT_PUBLIC_SITE_URL, node interpreter when it comes from nvm
+sudo systemctl daemon-reload && sudo systemctl enable --now dsh-ziwei-app
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8815/ziwei/chart
+
+# 2) the plugin: dsh plugin add <path-to-your-checkout> (equivalently Plugins page →
+#    Add plugin → this repo's absolute path → Install → enable → reload). Manual
+#    equivalent: add "dsh-ziwei": "link:<path-to-your-checkout>" to the profile's
+#    dependencies, append "dsh-ziwei" to dsh.profile.bundles, link it into node_modules.
 ```
+
+The examples put the checkout at `/opt/dsh/dsh-ziwei`; that is a convention, not a
+requirement — substitute your own path in the commands and in the unit. `next start`
+exits immediately without a build, so build first and restart the unit after every
+app change. Fields and permissions are documented in `deploy/systemd/README.md`.
 
 The app must be built with `basePath: '/ziwei'` and `NEXT_PUBLIC_BASE_PATH=/ziwei` (both already set); a mismatch between either of those and the proxy prefix gives an unstyled page inside the iframe.
 

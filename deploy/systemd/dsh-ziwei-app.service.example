@@ -1,0 +1,61 @@
+# dsh-ziwei chart app — systemd unit template.
+#
+# This file is a TEMPLATE, not an installed unit: systemd only loads files with an
+# exact ".service" suffix from its own unit directories, so a "*.service.example"
+# inside a checkout is never started by accident. Copy it to install it.
+#
+# Fields you MUST change before copying:
+#   /opt/dsh/dsh-ziwei   the path of your checkout (example only). It appears in
+#                        WorkingDirectory and EnvironmentFile.
+#   NEXT_PUBLIC_SITE_URL The public origin this DSH runs on, plus the /ziwei prefix
+#                        (https://dsh.example.com/ziwei here). It is only used for
+#                        absolute links inside the app; the plugin itself talks to
+#                        http://127.0.0.1:8815.
+#   ExecStart            Interpreter path. `/usr/bin/env node` picks node from PATH;
+#                        if node comes from nvm, prepend its bin directory to PATH
+#                        below, e.g.
+#                          Environment=PATH=/home/you/.nvm/versions/node/v24/bin:/usr/local/bin:/usr/bin:/bin
+#                        or replace `/usr/bin/env node` with the absolute node path.
+#
+# Fields you may want to change:
+#   User=   root here, which is what the author tests on. For a production host use
+#           a dedicated account (User=ziwei); the app only needs read access to the
+#           checkout plus write access to app/.next (Next.js runtime cache).
+#   -p 8815 The plugin proxies /ziwei/* here. Keep it on loopback, and change
+#           DSH_ZIWEI_UPSTREAM_PORT on the host if you move the port.
+#
+# Prerequisites (see the README "Install" section):
+#   git clone <repo> /opt/dsh/dsh-ziwei
+#   cd /opt/dsh/dsh-ziwei/app && npm ci && npm run build      # produces app/.next
+#   app/.env.local is OPTIONAL: this version needs no keys (readings go through the
+#   plugin and the host model), and the unit starts without the file.
+#
+# Install:
+#   sudo cp deploy/systemd/dsh-ziwei-app.service.example /etc/systemd/system/dsh-ziwei-app.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now dsh-ziwei-app
+#   curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8815/ziwei/chart
+
+[Unit]
+Description=Zi Wei Dou Shu web app (embedded in dsh-ziwei plugin)
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/opt/dsh/dsh-ziwei/app
+# Optional: holds no values in a default install (no API keys any more). The leading
+# "-" keeps the unit starting when the file is absent, which is the common case.
+EnvironmentFile=-/opt/dsh/dsh-ziwei/app/.env.local
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=NODE_ENV=production
+Environment=NEXT_TELEMETRY_DISABLED=1
+# Change to the public origin of your DSH instance (must keep the /ziwei prefix).
+Environment=NEXT_PUBLIC_SITE_URL=https://dsh.example.com/ziwei
+# Must match basePath in app/next.config.js and the plugin's proxy prefix.
+Environment=NEXT_PUBLIC_BASE_PATH=/ziwei
+ExecStart=/usr/bin/env node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 8815
+Restart=on-failure
+RestartSec=4
+
+[Install]
+WantedBy=multi-user.target
