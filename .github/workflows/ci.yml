@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # app/ 是内嵌的 Next.js 应用（独立 package.json / lockfile），--static 会跑
+      # node --check、app 的 tsc --noEmit 与 10 组内核回归（tsx）。
+      - name: 安装 app 依赖
+        run: npm ci --no-audit --no-fund
+        working-directory: app
+
+      - name: 静态检查（node --check + tsc --noEmit + app 内核回归）
+        run: bash scripts/check.sh --static
